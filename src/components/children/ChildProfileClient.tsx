@@ -186,6 +186,7 @@ export function ChildProfileClient({
         </Link>
         <div className="flex items-center gap-3">
           {child.profile_photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={child.profile_photo_url} alt="" className="w-10 h-10 rounded-xl object-cover" />
           ) : (
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white font-bold">

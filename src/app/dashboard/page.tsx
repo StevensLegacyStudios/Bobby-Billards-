@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, Baby, DollarSign, Activity, Plus, ArrowRight, CalendarHeart } from 'lucide-react'
+import { CalendarDays, Baby, DollarSign, Plus, ArrowRight, CalendarHeart } from 'lucide-react'
 import { formatDate, timeAgo } from '@/lib/utils'
-import type { CalendarEvent, Expense, ActivityLog, Calendar } from '@/lib/types'
+import type { CalendarEvent, Expense, Calendar, ActivityLog } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()

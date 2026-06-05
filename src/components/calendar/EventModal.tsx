@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { X, Trash2, AlertCircle } from 'lucide-react'
 import type { CalendarEvent, CalendarWithMembers, Child, EventType } from '@/lib/types'
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '@/lib/types'
-import { formatDate } from '@/lib/utils'
 
 const CUSTODY_PATTERNS = [
   { value: 'every_weekend', label: 'Every Weekend (Sat–Sun)', rrule: 'FREQ=WEEKLY;BYDAY=SA,SU' },
@@ -18,7 +17,7 @@ const CUSTODY_PATTERNS = [
 
 interface EventModalProps {
   calendars: CalendarWithMembers[]
-  children: Child[]
+  childProfiles: Child[]
   userId: string
   event: CalendarEvent | null
   defaultSlot: { start: Date; end: Date } | null
@@ -31,7 +30,7 @@ function toLocalDatetime(d: Date | string) {
   return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export function EventModal({ calendars, children, userId, event, defaultSlot, onClose, onSaved }: EventModalProps) {
+export function EventModal({ calendars, childProfiles, userId, event, defaultSlot, onClose, onSaved }: EventModalProps) {
   const supabase = createClient()
   const isEdit = !!event
 
@@ -112,7 +111,7 @@ export function EventModal({ calendars, children, userId, event, defaultSlot, on
     onSaved()
   }
 
-  const calendarChildren = children.filter(c => c.calendar_id === form.calendar_id)
+  const calendarChildren = childProfiles.filter(c => c.calendar_id === form.calendar_id)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

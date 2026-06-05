@@ -8,7 +8,6 @@ import { CalendarHeart } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const supabase = createClient()
   const [form, setForm] = useState({ fullName: '', email: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,6 +31,7 @@ export default function RegisterPage() {
 
     setLoading(true)
 
+    const supabase = createClient()
     const { error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,

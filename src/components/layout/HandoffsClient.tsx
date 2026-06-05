@@ -8,13 +8,13 @@ import { formatDateTime } from '@/lib/utils'
 
 interface HandoffsClientProps {
   handoffs: HandoffLog[]
-  children: Child[]
+  childProfiles: Child[]
   profiles: Profile[]
   userId: string
   calendarIds: string[]
 }
 
-export function HandoffsClient({ handoffs: initial, children, profiles, userId, calendarIds }: HandoffsClientProps) {
+export function HandoffsClient({ handoffs: initial, childProfiles, profiles, userId, calendarIds }: HandoffsClientProps) {
   const supabase = createClient()
   const [handoffs, setHandoffs] = useState(initial)
   const [showForm, setShowForm] = useState(false)
@@ -98,7 +98,7 @@ export function HandoffsClient({ handoffs: initial, children, profiles, userId, 
       ) : (
         <div className="space-y-3">
           {handoffs.map(handoff => {
-            const involvedChildren = children.filter(c => handoff.child_ids.includes(c.id))
+            const involvedChildren = childProfiles.filter(c => handoff.child_ids.includes(c.id))
             const fromParent = profiles.find(p => p.id === handoff.from_parent)
             const toParent = profiles.find(p => p.id === handoff.to_parent)
 
@@ -194,11 +194,11 @@ export function HandoffsClient({ handoffs: initial, children, profiles, userId, 
                   </select>
                 </div>
               </div>
-              {children.length > 0 && (
+              {childProfiles.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Children</label>
                   <div className="flex flex-wrap gap-2">
-                    {children.map(child => (
+                    {childProfiles.map(child => (
                       <button
                         key={child.id}
                         onClick={() => toggleChild(child.id)}

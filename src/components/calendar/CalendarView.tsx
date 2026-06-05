@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -14,40 +14,47 @@ import { createClient } from '@/lib/supabase/client'
 
 interface CalendarViewProps {
   calendars: CalendarWithMembers[]
-  children: Child[]
+  childProfiles: Child[]
   userId: string
 }
 
-export function CalendarView({ calendars, children, userId }: CalendarViewProps) {
-  const supabase = createClient()
+export function CalendarView({ calendars, childProfiles, userId }: CalendarViewProps) {
+  const supabase = useMemo(() => createClient(), [])
   const calRef = useRef<FullCalendar>(null)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [newEventSlot, setNewEventSlot] = useState<{ start: Date; end: Date } | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 
-  const calendarIds = calendars.map(c => c.id)
-
-  const loadEvents = useCallback(async () => {
-    if (!calendarIds.length) return
-    const { data } = await supabase
-      .from('events')
-      .select('*')
-      .in('calendar_id', calendarIds)
-    setEvents((data ?? []) as CalendarEvent[])
-  }, [calendarIds.join(',')])
+  const calendarIds = useMemo(() => calendars.map(c => c.id), [calendars])
 
   useEffect(() => {
-    loadEvents()
-
     if (!calendarIds.length) return
+
+    let cancelled = false
+
+    async function fetchEvents() {
+      const { data } = await supabase
+        .from('events')
+        .select('*')
+        .in('calendar_id', calendarIds)
+      if (!cancelled) setEvents((data ?? []) as CalendarEvent[])
+    }
+
+    void fetchEvents()
+
     const channel = supabase
       .channel('events-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, loadEvents)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        void fetchEvents()
+      })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
-  }, [loadEvents])
+    return () => {
+      cancelled = true
+      void supabase.removeChannel(channel)
+    }
+  }, [calendarIds, supabase])
 
   const fcEvents = events.map(ev => ({
     id: ev.id,
@@ -70,6 +77,12 @@ export function CalendarView({ calendars, children, userId }: CalendarViewProps)
     setNewEventSlot({ start: arg.start, end: arg.end })
     setSelectedEvent(null)
     setModalOpen(true)
+  }
+
+  async function reloadEvents() {
+    if (!calendarIds.length) return
+    const { data } = await supabase.from('events').select('*').in('calendar_id', calendarIds)
+    setEvents((data ?? []) as CalendarEvent[])
   }
 
   return (
@@ -95,12 +108,12 @@ export function CalendarView({ calendars, children, userId }: CalendarViewProps)
       {modalOpen && (
         <EventModal
           calendars={calendars}
-          children={children}
+          childProfiles={childProfiles}
           userId={userId}
           event={selectedEvent}
           defaultSlot={newEventSlot}
           onClose={() => setModalOpen(false)}
-          onSaved={() => { loadEvents(); setModalOpen(false) }}
+          onSaved={() => { void reloadEvents(); setModalOpen(false) }}
         />
       )}
     </div>

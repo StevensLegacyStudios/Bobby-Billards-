@@ -34,7 +34,7 @@ export default async function HandoffsPage() {
   return (
     <HandoffsClient
       handoffs={(handoffsRes.data ?? []) as HandoffLog[]}
-      children={(childrenRes.data ?? []) as Child[]}
+      childProfiles={(childrenRes.data ?? []) as Child[]}
       profiles={(profilesRes.data ?? []) as Profile[]}
       userId={user.id}
       calendarIds={calendarIds}

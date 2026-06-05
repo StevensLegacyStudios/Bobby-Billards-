@@ -48,7 +48,7 @@ export default async function CalendarPage() {
         </div>
       </div>
       <div className="flex-1 p-4 min-h-0">
-        <CalendarView calendars={calendars} children={children} userId={user.id} />
+        <CalendarView calendars={calendars} childProfiles={children} userId={user.id} />
       </div>
     </div>
   )

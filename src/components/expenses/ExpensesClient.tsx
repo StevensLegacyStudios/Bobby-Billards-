@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, X, AlertCircle, Check, FileText } from 'lucide-react'
 import type { Expense, Child, Calendar, ExpenseCategory, ExpenseStatus } from '@/lib/types'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { useRouter } from 'next/navigation'
 
 const CATEGORIES: ExpenseCategory[] = ['medical', 'dental', 'school', 'activity', 'clothing', 'food', 'general']
 const STATUS_COLORS: Record<ExpenseStatus, string> = {
@@ -17,15 +16,14 @@ const STATUS_COLORS: Record<ExpenseStatus, string> = {
 
 interface ExpensesClientProps {
   expenses: Expense[]
-  children: Child[]
+  childProfiles: Child[]
   calendars: Calendar[]
   userId: string
   calendarIds: string[]
 }
 
-export function ExpensesClient({ expenses: initial, children, calendars, userId, calendarIds }: ExpensesClientProps) {
+export function ExpensesClient({ expenses: initial, childProfiles, userId, calendarIds }: ExpensesClientProps) {
   const supabase = createClient()
-  const router = useRouter()
   const [expenses, setExpenses] = useState(initial)
   const [showForm, setShowForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState<ExpenseStatus | 'all'>('all')
@@ -113,8 +111,8 @@ export function ExpensesClient({ expenses: initial, children, calendars, userId,
           { label: 'Your Share (50%)', value: formatCurrency(myShare), color: 'indigo' },
           { label: 'Settled', value: expenses.filter(e => e.status === 'settled').length, color: 'green', suffix: ' items' },
           { label: 'Disputed', value: expenses.filter(e => e.status === 'disputed').length, color: 'red', suffix: ' items' },
-        ].map(({ label, value, color, suffix }) => (
-          <div key={label} className={`bg-white rounded-2xl border border-gray-100 p-4`}>
+        ].map(({ label, value, suffix }) => (
+          <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4">
             <p className="text-2xl font-bold text-gray-900">{value}{suffix}</p>
             <p className="text-xs text-gray-500 mt-0.5">{label}</p>
           </div>
@@ -146,7 +144,7 @@ export function ExpensesClient({ expenses: initial, children, calendars, userId,
         ) : (
           <div className="divide-y divide-gray-50">
             {filtered.map(expense => {
-              const child = children.find(c => c.id === expense.child_id)
+              const child = childProfiles.find(c => c.id === expense.child_id)
               const myAmount = expense.amount * (expense.split_percentage / 100)
               return (
                 <div key={expense.id} className="p-4 flex items-center justify-between gap-4">
@@ -275,7 +273,7 @@ export function ExpensesClient({ expenses: initial, children, calendars, userId,
                   />
                 </div>
               </div>
-              {children.length > 0 && (
+              {childProfiles.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">For Child</label>
                   <select
@@ -284,7 +282,7 @@ export function ExpensesClient({ expenses: initial, children, calendars, userId,
                     onChange={e => update('child_id', e.target.value)}
                   >
                     <option value="">Not specific to a child</option>
-                    {children.map(c => (
+                    {childProfiles.map(c => (
                       <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
                     ))}
                   </select>

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DollarSign } from 'lucide-react'
 import { ExpensesClient } from '@/components/expenses/ExpensesClient'
-import type { Expense, Child, Profile, Calendar } from '@/lib/types'
+import type { Expense, Child, Calendar } from '@/lib/types'
 
 export default async function ExpensesPage() {
   const supabase = await createClient()
@@ -45,7 +45,7 @@ export default async function ExpensesPage() {
   return (
     <ExpensesClient
       expenses={expenses}
-      children={children}
+      childProfiles={children}
       calendars={calendars}
       userId={user.id}
       calendarIds={calendarIds}

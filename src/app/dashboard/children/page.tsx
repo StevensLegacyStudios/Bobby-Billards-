@@ -64,6 +64,7 @@ export default async function ChildrenPage() {
               >
                 <div className="flex items-center gap-3 mb-4">
                   {child.profile_photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={child.profile_photo_url}
                       alt={child.first_name}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Bell, CheckCheck } from 'lucide-react'
 import type { Notification } from '@/lib/types'
@@ -12,23 +12,21 @@ interface NotificationsClientProps {
 }
 
 export function NotificationsClient({ notifications: initial, userId }: NotificationsClientProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [notifications, setNotifications] = useState(initial)
 
   useEffect(() => {
-    // Mark all as read after viewing
-    const unread = notifications.filter(n => !n.is_read).map(n => n.id)
-    if (unread.length > 0) {
-      supabase
+    const unreadIds = initial.filter(n => !n.is_read).map(n => n.id)
+    if (unreadIds.length > 0) {
+      void supabase
         .from('notifications')
         .update({ is_read: true })
-        .in('id', unread)
+        .in('id', unreadIds)
         .then(() => {
           setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
         })
     }
 
-    // Subscribe to new notifications
     const channel = supabase
       .channel('notifications-realtime')
       .on(
@@ -40,8 +38,8 @@ export function NotificationsClient({ notifications: initial, userId }: Notifica
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
-  }, [])
+    return () => { void supabase.removeChannel(channel) }
+  }, [supabase, userId, initial])
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
