@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, X, ClipboardList } from 'lucide-react'
 import type { HandoffLog, Child, Profile } from '@/lib/types'
@@ -15,7 +15,7 @@ interface HandoffsClientProps {
 }
 
 export function HandoffsClient({ handoffs: initial, childProfiles, profiles, userId, calendarIds }: HandoffsClientProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [handoffs, setHandoffs] = useState(initial)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)

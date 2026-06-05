@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, X, AlertCircle, Check, FileText } from 'lucide-react'
 import type { Expense, Child, Calendar, ExpenseCategory, ExpenseStatus } from '@/lib/types'
@@ -23,7 +23,7 @@ interface ExpensesClientProps {
 }
 
 export function ExpensesClient({ expenses: initial, childProfiles, userId, calendarIds }: ExpensesClientProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [expenses, setExpenses] = useState(initial)
   const [showForm, setShowForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState<ExpenseStatus | 'all'>('all')

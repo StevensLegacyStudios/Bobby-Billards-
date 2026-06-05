@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { X, Trash2, AlertCircle } from 'lucide-react'
 import type { CalendarEvent, CalendarWithMembers, Child, EventType } from '@/lib/types'
@@ -31,7 +31,7 @@ function toLocalDatetime(d: Date | string) {
 }
 
 export function EventModal({ calendars, childProfiles, userId, event, defaultSlot, onClose, onSaved }: EventModalProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const isEdit = !!event
 
   const [form, setForm] = useState({
