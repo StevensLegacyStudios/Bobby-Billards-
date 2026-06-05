@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, X, UserPlus, Settings, Palette } from 'lucide-react'
 import type { CalendarWithMembers, Profile } from '@/lib/types'
@@ -20,7 +20,7 @@ interface SettingsClientProps {
 }
 
 export function SettingsClient({ currentUser, calendars: initial, userId }: SettingsClientProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const [calendars, setCalendars] = useState(initial)
   const [showCreateCal, setShowCreateCal] = useState(false)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, X, Save, Pill, TrendingUp, FileText, AlertTriangle, Heart, School } from 'lucide-react'
@@ -27,7 +27,7 @@ export function ChildProfileClient({
   documents: initialDocs,
   userId,
 }: ChildProfileClientProps) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const isNew = !initialChild
   const [tab, setTab] = useState<Tab>('info')

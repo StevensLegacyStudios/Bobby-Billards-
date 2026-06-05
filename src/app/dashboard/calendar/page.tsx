@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { CalendarView } from '@/components/calendar/CalendarView'
+import { CalendarWrapper } from '@/components/calendar/CalendarWrapper'
 import type { CalendarWithMembers, Child } from '@/lib/types'
 
 export default async function CalendarPage() {
@@ -48,7 +48,7 @@ export default async function CalendarPage() {
         </div>
       </div>
       <div className="flex-1 p-4 min-h-0">
-        <CalendarView calendars={calendars} childProfiles={children} userId={user.id} />
+        <CalendarWrapper calendars={calendars} childProfiles={children} userId={user.id} />
       </div>
     </div>
   )

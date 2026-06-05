@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -30,9 +31,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ unreadCount = 0 }: SidebarProps) {
+  const supabase = useMemo(() => createClient(), [])
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
 
   async function signOut() {
     await supabase.auth.signOut()
