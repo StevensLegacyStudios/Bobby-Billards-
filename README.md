@@ -86,6 +86,7 @@ samples/              sample_fastpipe.xlsx + walkthrough
 ## Scripts & tests
 
 ```bash
+npm run demo        # guided, narrated walkthrough of a full job — no API key, throwaway data dir
 npm test            # unit tests for the deterministic engine + ingest (no API calls)
 npm run e2e         # full tool→engine→store loop end-to-end, deterministic (no API key needed)
 npm run typecheck   # tsc --noEmit
