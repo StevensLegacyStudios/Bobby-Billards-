@@ -39,6 +39,10 @@ the green OneDrive check, Power Automate's OneDrive/SharePoint "Move file" actio
 staging → job-folder move automatically when a submittal is approved. Until then, the tool
 prints the exact move manifest (`from → to`) for you to drag by hand.
 
+**Full folder design + per-job provisioning:** see
+**[docs/CLOSEOUT_FOLDERS.md](CLOSEOUT_FOLDERS.md)** and
+`scripts/provision-closeout-folders.ps1`.
+
 ---
 
 ## Step 1 — Provision the SharePoint lists
