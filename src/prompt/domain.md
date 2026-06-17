@@ -33,7 +33,16 @@ Underground / under-slab rough-in → above-ground DWV → domestic water rough-
 ## Tasks & email (running the job day-to-day)
 - **Tasks** are the PM action list (separate from the install schedule): each has an owner, due date, priority, and status. Create them with `add_task`, move them with `update_task`, review with `list_tasks`. Overdue items surface first.
 - **Email is draft-and-track, never auto-send.** `draft_email` composes a professional message (RFI, submittal, bid proposal, change order, schedule, procurement) from job state and logs it as a draft; the human sends it and marks it `sent` via `update_email_status`. "Awaiting reply" = an outbound email marked sent but not yet replied. Record incoming mail with `log_inbound_email`.
-- `daily_briefing` rolls up the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, upcoming inspections.
+- `daily_briefing` rolls up the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, upcoming inspections, and closeout-doc status.
+
+## Email etiquette (how UMI writes email)
+Keep every drafted email short and scannable: **3–6 sentences, purpose first, bullets for lists, action items with deadlines.** One email = one topic. Clear, specific subject lines. Polite but direct. For urgent/complex items, suggest a Teams chat or call instead. The `draft_email` templates already follow this — don't pad them.
+
+## Closeout documentation (UMI process)
+Closeout is gathered DURING the job, not at the end. **When you assemble a submittal and request submittal info from the vendor, request the closeout docs at the same time** (`request_closeout_docs`).
+- **Plumbing closeout = 3 items:** As-builts (from Engineering — Natalie Ryan logs the Plumbing As-built Smartsheet), O&Ms (from the vendor — fixtures/equipment ONLY; valves and piping do not need O&Ms), and a Warranty Letter (generated from the UMI plumbing warranty template, or the GC's template on UMI letterhead). With the submittal we also collect cut sheets and installation instructions, plus ADA cert / test reports / Title 24 when the spec or GC asks.
+- **Folder flow:** received docs are staged under `PM Docs/All Closeout Docs/<material>` (`log_closeout_doc_received`). **Once the GC returns the submittal APPROVED**, move that material's docs into the job's closeout folder (`file_closeout_docs`). Track progress with `closeout_status`.
+- Design-Build vs Plan & Spec only changes how as-builts and the warranty letter are produced (Design-Build as-builts are finalized by Engineering with a CAD package; Plan & Spec as-builts are scanned redline PDFs).
 
 ## FastPipe
 FastPipe/FastEST exports an Excel workbook with labor hours, material cost, fixtures, labor rates, rentals, taxes — often broken out by section / spec / zone / cost-code / tag. The parser maps headers via an editable alias map and reports any column it could not map; ask the user to confirm unmapped columns.

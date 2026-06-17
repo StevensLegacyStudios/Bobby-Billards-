@@ -48,7 +48,7 @@ const rl = createInterface({ input: stdin, output: stdout });
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let stepNo = 0;
-const TOTAL = 18;
+const TOTAL = 19;
 
 async function pause(): Promise<void> {
   if (AUTO) {
@@ -171,6 +171,7 @@ async function main(): Promise<void> {
       if (!call("advance_stage", { projectId: id }).advanced) break;
     }
   };
+  call("update_project", { projectId: id, patch: { jobNumber: "11836-15", division: "Plumbing" } });
   line(
     `  → Created. UA Local ${c.bold}${created.uaLocal}${c.reset} (East Bay), wage table seeded ${c.yellow}(all unverified)${c.reset}.`,
   );
@@ -285,15 +286,24 @@ async function main(): Promise<void> {
   line(`  ${c.green}✓ RFI logged & email sent.${c.reset}`);
   await pause();
 
-  // 10 — Log a submittal.
-  step("Log a submittal", "Track fixtures/valves/backflow to approval before release.");
-  typed("say", "Submittal: 22 40 00 plumbing fixtures + RPZ backflow cut sheets.");
-  call("log_submittal", {
+  // 10 — Log a submittal AND request closeout docs in the same breath (UMI process).
+  step("Submittal + closeout docs together", "When you submit, request closeout docs from the vendor at the same time — don't leave it to the end.");
+  typed("say", "Submittal: 22 40 00 plumbing fixtures. Request closeout docs from Cal Steam too.");
+  const submittal = call("log_submittal", {
     projectId: id,
     spec: "22 40 00 Plumbing Fixtures",
-    description: "Fixture cut sheets + 2\" RPZ backflow assembly data.",
+    description: "Kohler K-30810 Water Closet + fixtures",
   });
-  line(`  ${c.green}✓ Submittal pending approval.${c.reset}`);
+  const closeoutReq = call("request_closeout_docs", {
+    projectId: id,
+    material: "Kohler K-30810 Water Closet",
+    vendor: "Cal Steam",
+    submittalId: submittal.submittal.id,
+    neededBy: "2026-07-01",
+  });
+  emailCard(closeoutReq.email);
+  line(`  ${c.green}✓ Tracking ${closeoutReq.created.length} closeout docs${c.reset} ${c.dim}· staged at${c.reset} ${c.bold}${closeoutReq.stagingPath}${c.reset}`);
+  line(`  ${c.dim}(O&M/cut sheets/install → Cal Steam · as-built → Engineering · warranty letter → UMI template)${c.reset}`);
   await pause();
 
   // 11 — Add tasks (the to-do list).
@@ -373,7 +383,17 @@ async function main(): Promise<void> {
   line(`  ${c.green}✓ Reply logged (RFI email no longer awaiting); 1 task completed.${c.reset}`);
   await pause();
 
-  // 18 — Daily briefing: the whole plate at a glance.
+  // 18 — Closeout docs received and filed on submittal approval.
+  step("Closeout: receive & file on approval", "Docs land in the staging folder; once the GC approves the submittal, they move into the job folder.");
+  typed("say", "Cal Steam sent the closeout docs, and SC Builders approved the submittal — file them.");
+  call("log_closeout_doc_received", { projectId: id, material: "Kohler K-30810 Water Closet" });
+  const filed = call("file_closeout_docs", { projectId: id, material: "Kohler K-30810 Water Closet" });
+  line(`  ${c.green}✓ Filed ${filed.filed} docs${c.reset} → ${c.bold}${filed.to}${c.reset}`);
+  for (const m of filed.manifest.slice(0, 2))
+    line(`    ${c.dim}•${c.reset} ${m.docType}: ${c.dim}${m.from} →${c.reset} ${m.to}`);
+  await pause();
+
+  // 19 — Daily briefing: the whole plate at a glance.
   step("Daily briefing", "One snapshot of the entire job — the 'what's on my plate' command.");
   typed("cmd", "/briefing");
   const br = call("daily_briefing", { projectId: id });
@@ -383,10 +403,11 @@ async function main(): Promise<void> {
   tasksList(br.tasks.top, TODAY);
   line(`  ${c.bold}EMAIL:${c.reset} ${br.email.drafts} draft, ${br.email.awaitingReplies} awaiting reply`);
   line(`  ${c.bold}OPEN:${c.reset} RFIs ${br.rfis.open} · submittals ${br.submittals.pending} · inspections ${br.inspections.upcoming}`);
+  line(`  ${c.bold}CLOSEOUT:${c.reset} ${br.closeout.outstanding} outstanding · ${br.closeout.readyToFile} ready to file`);
 
   line();
   line(`${c.bold}${c.green}That's the whole loop.${c.reset} estimate → bid → RFIs/submittals → email → tasks → schedule →`);
-  line(`${c.green}procurement → inspections → payroll → change orders → briefing.${c.reset}`);
+  line(`${c.green}procurement → inspections → payroll → change orders → closeout → briefing.${c.reset}`);
   line(`${c.dim}Run it for real with your own jobs: ${c.reset}${c.bold}npm run dev${c.reset}   ${c.dim}· Full guide: MANUAL.md${c.reset}`);
   line();
   rl.close();

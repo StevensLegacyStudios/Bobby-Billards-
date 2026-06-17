@@ -312,6 +312,10 @@ export const EmailSchema = z.object({
       "schedule",
       "inspection",
       "procurement",
+      "closeout_request",
+      "vendor_quote",
+      "po_request",
+      "foreman_alert",
     ])
     .default("general"),
   /** id of the linked record (rfi/submittal/etc.), if any */
@@ -324,6 +328,54 @@ export const EmailSchema = z.object({
   sentAt: z.string().nullable().default(null),
 });
 export type Email = z.infer<typeof EmailSchema>;
+
+/**
+ * Closeout documentation, tracked per material from request → received (staged in
+ * "PM Docs/All Closeout Docs/<material>") → filed (moved into the job's closeout
+ * folder once the GC approves the submittal). Mirrors UMI's closeout process:
+ * plumbing closeout = As-builts (Engineering) + O&Ms (vendor, fixtures/equipment
+ * only) + Warranty Letter (UMI template), plus cut sheets / install / ADA / test
+ * reports / Title 24 as the spec or GC requires.
+ */
+export const CLOSEOUT_DOC_TYPES = [
+  "as_built",
+  "o_and_m",
+  "warranty_letter",
+  "cut_sheet",
+  "installation",
+  "ada_cert",
+  "test_report",
+  "title_24",
+  "other",
+] as const;
+export const CloseoutDocTypeSchema = z.enum(CLOSEOUT_DOC_TYPES);
+export type CloseoutDocType = z.infer<typeof CloseoutDocTypeSchema>;
+
+export const CloseoutDocSchema = z.object({
+  id: z.string(),
+  /** the submittal this doc supports (closeout is requested alongside submittals) */
+  submittalId: z.string().nullable().default(null),
+  /** the fixture/equipment, e.g. "Kohler K-30810 Water Closet" */
+  material: z.string(),
+  docType: CloseoutDocTypeSchema,
+  /** where it comes from: vendor (O&M/cut sheet), engineering (as-built), internal (warranty letter), gc */
+  source: z
+    .enum(["vendor", "engineering", "internal", "gc", "other"])
+    .default("vendor"),
+  status: z
+    .enum(["needed", "requested", "received", "filed", "waived"])
+    .default("needed"),
+  requestedFrom: z.string().nullable().default(null),
+  requestedAt: z.string().nullable().default(null),
+  receivedAt: z.string().nullable().default(null),
+  filedAt: z.string().nullable().default(null),
+  /** staging location under PM Docs/All Closeout Docs/<material>/ */
+  stagingPath: z.string().nullable().default(null),
+  /** final location under <job>/Closeout/<material>/ after submittal approval */
+  jobPath: z.string().nullable().default(null),
+  note: z.string().nullable().default(null),
+});
+export type CloseoutDoc = z.infer<typeof CloseoutDocSchema>;
 
 export const OpenQuestionSchema = z.object({
   id: z.string(),
@@ -395,6 +447,10 @@ export const ProjectSchema = z.object({
   /** > $1,000 public works => prevailing wage + certified payroll apply. null = undecided. */
   publicWorks: z.boolean().nullable().default(null),
   uaLocal: z.string(),
+  /** UMI division — closeout requirements differ by trade. */
+  division: z.enum(["Plumbing", "HVAC", "Both"]).default("Plumbing"),
+  /** UMI internal job number, format XXXXX-XX (e.g. 11836-15). */
+  jobNumber: z.string().nullable().default(null),
   scopeSummary: z.string().nullable().default(null),
 
   workflowStatus: WorkflowStatusSchema.default({}),
@@ -417,6 +473,7 @@ export const ProjectSchema = z.object({
   payroll: z.array(PayrollWeekSchema).default([]),
   tasks: z.array(TaskItemSchema).default([]),
   emails: z.array(EmailSchema).default([]),
+  closeoutDocs: z.array(CloseoutDocSchema).default([]),
   openQuestions: z.array(OpenQuestionSchema).default([]),
   activityLog: z.array(ActivityLogEntrySchema).default([]),
 });

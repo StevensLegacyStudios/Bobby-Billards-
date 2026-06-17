@@ -143,4 +143,25 @@ const briefing = call("daily_briefing", { projectId });
 ok("briefing reports the current stage", typeof briefing.stage === "string" && briefing.stage.length > 0);
 ok("briefing counts the open RFI", briefing.rfis.open >= 1);
 
+// 13. Closeout docs: request with submittal → receive → file on approval.
+const sub = call("log_submittal", { projectId, spec: "22 40 00", description: "Kohler K-30810 WC" });
+const req = call("request_closeout_docs", {
+  projectId,
+  material: "Kohler K-30810 Water Closet",
+  vendor: "Cal Steam",
+  submittalId: sub.submittal.id,
+  neededBy: "2026-07-01",
+});
+ok("request_closeout_docs stages a PM Docs folder", req.stagingPath === "PM Docs/All Closeout Docs/Kohler K-30810 Water Closet");
+ok("request_closeout_docs drafts the combined vendor email", req.email.kind === "closeout_request" && /Closeout Docs/.test(req.email.subject));
+ok("vendor docs are marked requested", req.created.some((d: any) => d.source === "vendor" && d.status === "requested"));
+ok("as-built is sourced from engineering", req.created.some((d: any) => d.docType === "as_built" && d.source === "engineering"));
+call("log_closeout_doc_received", { projectId, material: "Kohler K-30810 Water Closet" });
+const csReceived = call("closeout_status", { projectId });
+ok("received docs are staged, ready to file", csReceived.readyToFile.includes("Kohler K-30810 Water Closet"));
+const filed = call("file_closeout_docs", { projectId, material: "Kohler K-30810 Water Closet" });
+ok("filing moves docs into the job closeout folder", /\/Closeout\/Kohler K-30810 Water Closet$/.test(filed.to));
+const csFiled = call("closeout_status", { projectId });
+ok("filed docs clear from outstanding", csFiled.byMaterial.find((m: any) => m.material === "Kohler K-30810 Water Closet").filed > 0);
+
 console.log(`\nAll ${pass} checks passed.`);

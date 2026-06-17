@@ -89,6 +89,7 @@ To quit: type `/exit` (or `Ctrl-C`).
 | `/briefing` | The "what's on my plate" snapshot: next action, tasks, emails, RFIs, inspections. |
 | `/tasks` | List the job's to-dos (overdue first). |
 | `/email` | List logged emails (drafts + awaiting reply). |
+| `/closeout` | Closeout-doc progress per material (requested / staged / filed). |
 | `/projects` | List every saved job with its stage and open-question count. |
 | `/help` | Reprint the banner. |
 | `/exit` | Quit. |
@@ -135,10 +136,20 @@ is deliberate: the tool stays local and never reaches outside your machine.
 one view — stage + next action, open/overdue tasks, emails awaiting reply, open
 RFIs/submittals, and upcoming inspections.
 
+**Closeout documentation — gathered during the job, not at the end.** The moment you
+assemble a submittal and ask the vendor for submittal info, ask for the closeout docs too:
+*"request closeout docs from Cal Steam for the Kohler water closet."* The tool
+(`request_closeout_docs`) tracks the required set — **As-builts** (from Engineering),
+**O&Ms** (vendor; fixtures/equipment only — not valves/piping), **Warranty Letter** (UMI
+template), plus cut sheets / install / ADA — and drafts the combined vendor email. As docs
+arrive they're staged under `PM Docs/All Closeout Docs/<material>`; once the **GC returns
+the submittal approved**, *"file the closeout docs"* moves them into the job's closeout
+folder. `/closeout` shows progress per material.
+
 Everything else the tool tracks — RFIs, submittals, change orders, inspections,
-procurement, the install schedule, and a certified-payroll preview — works the same way:
-just describe what happened and the brain records it. The `npm run demo` walkthrough
-exercises all of it end to end.
+procurement, the install schedule, a certified-payroll preview, and closeout — works the
+same way: just describe what happened and the brain records it. The `npm run demo`
+walkthrough exercises all of it end to end.
 
 ## 5. The job lifecycle (stages)
 
@@ -268,4 +279,4 @@ npm start           # run the compiled build
 ```
 
 In the app: `/new`, `/open`, `/ingest`, `/status` (`/next`), `/briefing`, `/tasks`,
-`/email`, `/projects`, `/help`, `/exit`.
+`/email`, `/closeout`, `/projects`, `/help`, `/exit`.

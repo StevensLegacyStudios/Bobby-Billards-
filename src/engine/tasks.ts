@@ -1,4 +1,5 @@
 import type { Email, Project, TaskItem } from "../schema/project.js";
+import { closeoutProgress } from "./closeout.js";
 import { computeGaps } from "./gaps.js";
 
 const PRIORITY_RANK: Record<TaskItem["priority"], number> = {
@@ -61,12 +62,14 @@ export interface Briefing {
   rfis: { open: number };
   submittals: { pending: number };
   inspections: { upcoming: number };
+  closeout: { outstanding: number; readyToFile: number };
 }
 
 /** A single "what's on my plate" snapshot across the whole job. */
 export function buildBriefing(project: Project, today: string): Briefing {
   const gaps = computeGaps(project);
   const b = taskBuckets(project, today);
+  const co = closeoutProgress(project);
   return {
     stage: gaps.currentStageLabel,
     nextAction: gaps.nextAction,
@@ -90,5 +93,6 @@ export function buildBriefing(project: Project, today: string): Briefing {
     inspections: {
       upcoming: project.inspections.filter((i) => i.result === "scheduled").length,
     },
+    closeout: { outstanding: co.totals.outstanding, readyToFile: co.readyToFile.length },
   };
 }

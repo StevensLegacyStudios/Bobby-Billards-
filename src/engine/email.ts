@@ -1,3 +1,4 @@
+import { findContact, umiContacts } from "../kb.js";
 import type { Project } from "../schema/project.js";
 
 export type EmailKind =
@@ -8,7 +9,11 @@ export type EmailKind =
   | "change_order"
   | "schedule"
   | "inspection"
-  | "procurement";
+  | "procurement"
+  | "closeout_request"
+  | "vendor_quote"
+  | "po_request"
+  | "foreman_alert";
 
 export interface DraftedEmail {
   party: string;
@@ -16,58 +21,143 @@ export interface DraftedEmail {
   body: string;
 }
 
+export interface DraftOptions {
+  relatedId?: string | null;
+  to?: string | null;
+  material?: string | null;
+  docLabels?: string[];
+  neededBy?: string | null;
+  items?: string | null;
+  vendor?: string | null;
+  foreman?: string | null;
+}
+
 function money(n: number): string {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** UMI signature block — short, with name, role, phone, email per the etiquette guide. */
 function signature(project: Project): string {
-  const who = project.owner ?? "Project Manager";
-  return `\nRegards,\n${who}\n${project.name}`;
+  const pm = (project.owner && findContact(project.owner)) || umiContacts.defaultPM;
+  const line = [pm.phone, pm.email].filter(Boolean).join(" · ");
+  return `\nThanks,\n${pm.name} — United Mechanical${line ? `\n${line}` : ""}`;
 }
 
+/** Job tag for subject lines: "[Job (Job#)]". */
 function jobTag(project: Project): string {
-  return `[${project.name}]`;
+  return project.jobNumber ? `[${project.name} · ${project.jobNumber}]` : `[${project.name}]`;
+}
+
+/** Best greeting name for the GC side. */
+function gcName(project: Project): string {
+  return project.client.contact ?? project.client.gc ?? "team";
 }
 
 /**
- * Compose a professional email body from job state for the given kind. This is a
- * deterministic fallback so the tool is useful even without the LLM; when the
- * brain has more context it can pass its own subject/body instead.
+ * Compose a professional email body from job state, following UMI email etiquette:
+ * short (3–6 sentences), purpose first, bullets for lists, action items with
+ * deadlines. Deterministic so the tool is useful without the LLM; the brain may
+ * pass its own subject/body when it has more context.
  */
 export function draftEmail(
   project: Project,
   kind: EmailKind,
-  relatedId: string | null,
+  opts: DraftOptions = {},
 ): DraftedEmail {
-  const gc = project.client.gc ?? project.client.contact ?? "team";
+  const gc = gcName(project);
   const tag = jobTag(project);
 
   switch (kind) {
     case "rfi": {
-      const rfi = project.rfis.find((r) => r.id === relatedId) ?? project.rfis.at(-1);
+      const rfi = project.rfis.find((r) => r.id === opts.relatedId) ?? project.rfis.at(-1);
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} RFI — ${rfi?.subject ?? "Request for Information"}`,
         body:
           `Hi ${gc},\n\n` +
-          `We need clarification before we can proceed on ${project.name}:\n\n` +
-          `RFI: ${rfi?.subject ?? "(subject)"}\n` +
-          `${rfi?.question ?? "(question)"}\n\n` +
-          `Please advise so we can keep the install on schedule. Let me know if a quick call would be faster.` +
+          `Following up — we need a clarification before we can proceed:\n\n` +
+          `• ${rfi?.question ?? "(question)"}\n\n` +
+          `Can you confirm so we keep the install on schedule? A quick call works too.` +
           signature(project),
       };
     }
     case "submittal": {
-      const sub = project.submittals.find((s) => s.id === relatedId) ?? project.submittals.at(-1);
+      const sub = project.submittals.find((s) => s.id === opts.relatedId) ?? project.submittals.at(-1);
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} Submittal — ${sub?.spec ?? "Product Data"}`,
         body:
           `Hi ${gc},\n\n` +
-          `Please find our submittal for review and approval on ${project.name}:\n\n` +
-          `Spec section: ${sub?.spec ?? "(spec)"}\n` +
-          `${sub?.description ?? "Product data / shop drawings attached."}\n\n` +
-          `Kindly return reviewed/approved so we can release the order against the schedule.` +
+          `Submitting for review and approval:\n\n` +
+          `• Spec: ${sub?.spec ?? "(spec)"}\n` +
+          `• ${sub?.description ?? "Product data / shop drawings attached."}\n\n` +
+          `Please return approved so we can release the order. Let me know your review timeline.` +
+          signature(project),
+      };
+    }
+    case "closeout_request": {
+      const docs =
+        opts.docLabels && opts.docLabels.length
+          ? opts.docLabels
+          : ["Cut sheets / product data", "Installation instructions", "O&M manual", "Warranty documentation"];
+      const by = opts.neededBy ? `by ${opts.neededBy}` : "with your submittal";
+      return {
+        party: opts.to ?? opts.vendor ?? "Vendor",
+        subject: `${tag} Submittal + Closeout Docs — ${opts.material ?? "Material"}`,
+        body:
+          `Hi ${opts.vendor ?? opts.to ?? "there"},\n\n` +
+          `Requesting submittal info and closeout documentation for ${opts.material ?? "this material"} on ${project.name}. ` +
+          `Please send:\n\n` +
+          docs.map((d) => `• ${d}`).join("\n") +
+          `\n\nWe need these ${by} so closeout isn't held up at the end of the job. Thank you.` +
+          signature(project),
+      };
+    }
+    case "vendor_quote": {
+      const by = opts.neededBy ? ` We need this by ${opts.neededBy}.` : "";
+      return {
+        party: opts.to ?? opts.vendor ?? "Vendor",
+        subject: `${tag} Quote Request — ${opts.items ?? "Materials"}`,
+        body:
+          `Hi ${opts.vendor ?? opts.to ?? "there"},\n\n` +
+          `Can you provide the following for ${project.name}:\n\n` +
+          `• Quote / pricing\n` +
+          `• Lead time\n` +
+          `• Submittal / cut sheets\n\n` +
+          `Item: ${opts.items ?? "(describe)"}.${by} Reply here or call me anytime.` +
+          signature(project),
+      };
+    }
+    case "po_request": {
+      const co = project.changeOrders.find((c) => c.id === opts.relatedId);
+      return {
+        party: opts.to ?? umiContacts.company.poDepartmentEmail,
+        subject: `PO REQUEST — ${project.name}${project.jobNumber ? ` — ${project.jobNumber}` : ""} — ${opts.vendor ?? "Vendor"} — ${opts.items ?? "Material"}`,
+        body:
+          `Purchasing,\n\n` +
+          `Please issue a PO for the following:\n\n` +
+          `• Job: ${project.name}${project.jobNumber ? ` (${project.jobNumber})` : ""}\n` +
+          `• Vendor: ${opts.vendor ?? "(vendor)"}\n` +
+          `• Item: ${opts.items ?? "(item)"}\n` +
+          `• Amount: ${co ? money(co.costDelta) : "(quote attached)"}\n` +
+          `• Required by: ${opts.neededBy ?? "(date)"}\n\n` +
+          `Tag material with the PO#. Please send confirmation once issued.` +
+          signature(project),
+      };
+    }
+    case "foreman_alert": {
+      const foreman = opts.foreman ? findContact(opts.foreman) : undefined;
+      const party = foreman?.email ?? opts.to ?? opts.foreman ?? "Foreman";
+      return {
+        party,
+        subject: `DELIVERY TOMORROW — ${project.name} — ${opts.items ?? "Materials"}`,
+        body:
+          `Hi ${foreman?.name ?? opts.foreman ?? "there"},\n\n` +
+          `Materials are delivering tomorrow for ${project.name}:\n\n` +
+          `• Item: ${opts.items ?? "(item)"}\n` +
+          `• Vendor: ${opts.vendor ?? "(vendor)"}\n` +
+          `• Deliver to: ${project.location.address ?? "(jobsite)"}\n\n` +
+          `Please confirm receipt and flag any damage or shortage. Call me if anything comes up.` +
           signature(project),
       };
     }
@@ -75,79 +165,77 @@ export function draftEmail(
       const total = project.bid.waterfall.total;
       const flagged = project.bid.assumptionFlags.length > 0;
       return {
-        party: gc,
-        subject: `${tag} Proposal — Plumbing TI`,
+        party: opts.to ?? gc,
+        subject: `${tag} Proposal — ${project.division} TI`,
         body:
           `Hi ${gc},\n\n` +
-          `Thank you for the opportunity to bid the plumbing scope on ${project.name}.\n\n` +
-          `Our proposed price is ${total > 0 ? money(total) : "(pending final numbers)"}, ` +
-          `covering the DWV, domestic water, gas, and fixture scope per the documents.\n\n` +
+          `Thanks for the opportunity to bid ${project.name}. ` +
+          `Our proposed price is ${total > 0 ? money(total) : "(pending final numbers)"} for the ${project.division.toLowerCase()} scope per the documents.` +
           (flagged
-            ? `Note: this number is being finalized pending confirmation of current ` +
-              `prevailing-wage/CBA rates and is not yet for contract.\n\n`
+            ? `\n\nNote: this is being finalized pending confirmation of current prevailing-wage/CBA rates — not yet for contract.`
             : ``) +
-          `Happy to walk through inclusions/exclusions at your convenience.` +
+          `\n\nHappy to walk through inclusions/exclusions whenever works.` +
           signature(project),
       };
     }
     case "change_order": {
-      const co = project.changeOrders.find((c) => c.id === relatedId) ?? project.changeOrders.at(-1);
+      const co = project.changeOrders.find((c) => c.id === opts.relatedId) ?? project.changeOrders.at(-1);
       return {
-        party: gc,
-        subject: `${tag} Change Order Request${co ? ` — ${co.description}` : ""}`,
+        party: opts.to ?? gc,
+        subject: `${tag} Change Order${co ? ` — ${co.description}` : ""}`,
         body:
           `Hi ${gc},\n\n` +
-          `The following change impacts our plumbing scope on ${project.name}:\n\n` +
-          `${co?.description ?? "(description)"}\n` +
-          `Cost impact: ${co ? money(co.costDelta) : "(pending)"}\n\n` +
-          `Please confirm so we can proceed; this work is not included in the base contract.` +
+          `Submitting a change that impacts our scope on ${project.name}:\n\n` +
+          `• ${co?.description ?? "(description)"}\n` +
+          `• Cost impact: ${co ? money(co.costDelta) : "(pending)"}\n\n` +
+          `Please confirm approval — this work is outside the base contract.` +
           signature(project),
       };
     }
     case "schedule": {
       const finish = project.schedule.tasks.at(-1)?.finish;
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} Plumbing Schedule Update`,
         body:
           `Hi ${gc},\n\n` +
-          `Here is the current plumbing install sequence for ${project.name}` +
+          `Quick schedule update for ${project.name}` +
           (project.schedule.startDate ? ` (start ${project.schedule.startDate}` : ``) +
           (finish ? `, projected finish ${finish}).` : project.schedule.startDate ? `).` : `.`) +
-          `\n\nWe will sequence underground → rough-in → top-out → trim, with inspections gating each phase. ` +
-          `Let me know of any GC milestones we should align to.` +
+          `\n\nWe'll sequence underground → rough-in → top-out → trim, with inspections gating each phase. ` +
+          `Let me know of any GC milestones to align to.` +
           signature(project),
       };
     }
     case "procurement": {
       const open = project.procurement.filter((p) => p.status !== "delivered");
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} Long-Lead Procurement`,
         body:
           `Hi ${gc},\n\n` +
-          `Flagging long-lead material on ${project.name} so we protect the schedule:\n\n` +
+          `Flagging long-lead material on ${project.name} to protect the schedule:\n\n` +
           (open.length
             ? open.map((p) => `• ${p.item}${p.needBy ? ` — need by ${p.needBy}` : ""} (${p.status})`).join("\n")
             : `• (no open procurement items)`) +
-          `\n\nPlease confirm approvals/releases so we can place orders.` +
+          `\n\nPlease confirm releases so we can place orders.` +
           signature(project),
       };
     }
     case "inspection": {
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} Inspection Coordination`,
         body:
           `Hi ${gc},\n\n` +
-          `We're ready to coordinate the next plumbing inspection on ${project.name}. ` +
-          `Please confirm inspector availability and access so we can stay ahead of cover.` +
+          `We're ready for the next plumbing inspection on ${project.name}. ` +
+          `Can you confirm inspector availability and site access so we stay ahead of cover?` +
           signature(project),
       };
     }
     default:
       return {
-        party: gc,
+        party: opts.to ?? gc,
         subject: `${tag} Update`,
         body: `Hi ${gc},\n\n(Compose your message.)` + signature(project),
       };

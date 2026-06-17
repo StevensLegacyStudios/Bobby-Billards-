@@ -72,6 +72,32 @@ export interface BidDefaultsKb {
   contingencyPct: number;
 }
 
+export interface Contact {
+  name: string;
+  role?: string;
+  company?: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface UmiContactsKb {
+  version: string;
+  note: string;
+  company: {
+    name: string;
+    address: string;
+    branchAddress: string;
+    phone: string;
+    poDepartmentEmail: string;
+    bidsEmail: string;
+    jobNumberFormat: string;
+  };
+  defaultPM: Contact;
+  internal: Contact[];
+  gc: Contact[];
+  vendor: Contact[];
+}
+
 export const uaLocals = loadJson<UaLocalsKb>("ua_locals.json");
 export const workflowStages = loadJson<WorkflowStagesKb>("workflow_stages.json");
 export const scopeCatalog = loadJson<ScopeCatalogKb>("scope_catalog.json");
@@ -79,9 +105,21 @@ export const fastpipeColumns = loadJson<FastpipeColumnsKb>(
   "fastpipe_columns.json",
 );
 export const bidDefaults = loadJson<BidDefaultsKb>("bid_defaults.json");
+export const umiContacts = loadJson<UmiContactsKb>("umi_contacts.json");
 
 export function localForRegion(region: Region): string {
   return uaLocals.regionToLocal[region];
+}
+
+/** Look up a contact by (partial) name or company across the UMI directory. */
+export function findContact(query: string): Contact | undefined {
+  const q = query.trim().toLowerCase();
+  const all = [umiContacts.defaultPM, ...umiContacts.internal, ...umiContacts.gc, ...umiContacts.vendor];
+  return (
+    all.find((c) => c.name.toLowerCase() === q) ??
+    all.find((c) => c.name.toLowerCase().includes(q)) ??
+    all.find((c) => (c.company ?? "").toLowerCase().includes(q))
+  );
 }
 
 export function stageById(id: string): StageDef | undefined {

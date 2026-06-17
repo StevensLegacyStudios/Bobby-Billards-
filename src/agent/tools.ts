@@ -3,6 +3,14 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { bidDefaults, scopeCatalog, stageById } from "../kb.js";
 import { computeBid } from "../engine/bid.js";
+import {
+  closeoutProgress,
+  DOC_TYPE_LABEL,
+  jobCloseoutPath,
+  requiredDocsForMaterial,
+  stagingPath,
+  vendorRequestedDocs,
+} from "../engine/closeout.js";
 import { draftEmail, type EmailKind } from "../engine/email.js";
 import { computeGaps, STAGE_ORDER } from "../engine/gaps.js";
 import { computeLabor } from "../engine/labor.js";
@@ -770,20 +778,37 @@ const tools: ToolDef<z.ZodTypeAny>[] = [
   def({
     name: "draft_email",
     description:
-      "Compose and LOG an outbound email tied to the job (RFI, submittal, bid proposal, change order, schedule, procurement, or general). Draft-and-track only — it does NOT send; the human sends by copy/paste. If you don't pass subject/body, a professional draft is generated from job state.",
+      "Compose and LOG an outbound email tied to the job, following UMI email etiquette (short, purpose-first, bullets, action items + deadlines). Kinds: rfi, submittal, bid, change_order, schedule, inspection, procurement, closeout_request (vendor), vendor_quote (vendor), po_request (to purchasing), foreman_alert. Draft-and-track only — it does NOT send; the human sends by copy/paste. Pass subject/body to override the generated draft.",
     input: z.object({
       projectId: z.string(),
       kind: z
-        .enum(["general", "rfi", "submittal", "bid", "change_order", "schedule", "inspection", "procurement"])
+        .enum([
+          "general", "rfi", "submittal", "bid", "change_order", "schedule",
+          "inspection", "procurement", "closeout_request", "vendor_quote",
+          "po_request", "foreman_alert",
+        ])
         .default("general"),
       to: z.string().nullish(),
       subject: z.string().nullish(),
       body: z.string().nullish(),
       relatedId: z.string().nullish(),
+      material: z.string().nullish(),
+      vendor: z.string().nullish(),
+      items: z.string().nullish(),
+      neededBy: z.string().nullish(),
+      foreman: z.string().nullish(),
     }),
     handler: (i) =>
       withProject(i.projectId, (p) => {
-        const tpl = draftEmail(p, i.kind as EmailKind, i.relatedId ?? null);
+        const tpl = draftEmail(p, i.kind as EmailKind, {
+          relatedId: i.relatedId ?? null,
+          to: i.to ?? null,
+          material: i.material ?? null,
+          vendor: i.vendor ?? null,
+          items: i.items ?? null,
+          neededBy: i.neededBy ?? null,
+          foreman: i.foreman ?? null,
+        });
         const now = new Date().toISOString();
         const email = {
           id: `email_${randomUUID()}`,
@@ -837,7 +862,11 @@ const tools: ToolDef<z.ZodTypeAny>[] = [
       subject: z.string(),
       body: z.string().nullish(),
       kind: z
-        .enum(["general", "rfi", "submittal", "bid", "change_order", "schedule", "inspection", "procurement"])
+        .enum([
+          "general", "rfi", "submittal", "bid", "change_order", "schedule",
+          "inspection", "procurement", "closeout_request", "vendor_quote",
+          "po_request", "foreman_alert",
+        ])
         .default("general"),
       relatedId: z.string().nullish(),
     }),
@@ -892,6 +921,167 @@ const tools: ToolDef<z.ZodTypeAny>[] = [
           awaitingReplies: p.emails.filter((e) => e.direction === "outbound" && e.status === "sent").length,
         };
       }),
+  }),
+
+  // ----- closeout documentation -----------------------------------------
+
+  def({
+    name: "request_closeout_docs",
+    description:
+      "Request closeout documentation for a material AT THE SAME TIME as the submittal (UMI process). Creates tracked closeout-doc records (cut sheets, install, O&M, warranty — plus as-built from Engineering and the UMI warranty letter), stages a folder under 'PM Docs/All Closeout Docs/<material>', and drafts the vendor email requesting submittal info + closeout docs together. Note: valves and piping do NOT need O&Ms — only fixtures/equipment.",
+    input: z.object({
+      projectId: z.string(),
+      material: z.string(),
+      vendor: z.string(),
+      submittalId: z.string().nullish(),
+      isFixtureOrEquipment: z.boolean().default(true),
+      adaRequired: z.boolean().default(false),
+      neededBy: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const now = new Date().toISOString();
+        const required = requiredDocsForMaterial(p, {
+          isFixtureOrEquipment: i.isFixtureOrEquipment,
+          adaRequired: i.adaRequired,
+        });
+        const staging = stagingPath(i.material);
+        const created = required.map((r) => {
+          const fromVendor = r.source === "vendor";
+          const doc = {
+            id: `cod_${randomUUID()}`,
+            submittalId: i.submittalId ?? null,
+            material: i.material,
+            docType: r.docType,
+            source: r.source,
+            status: (fromVendor ? "requested" : "needed") as "requested" | "needed",
+            requestedFrom: fromVendor ? i.vendor : null,
+            requestedAt: fromVendor ? now : null,
+            receivedAt: null,
+            filedAt: null,
+            stagingPath: staging,
+            jobPath: null,
+            note:
+              r.source === "engineering"
+                ? "As-built from Engineering (plumbing: Natalie Ryan)"
+                : r.source === "internal"
+                  ? "UMI warranty letter — generate from template"
+                  : null,
+          };
+          p.closeoutDocs.push(doc);
+          return doc;
+        });
+        const vendorDocs = vendorRequestedDocs(required);
+        const email = draftEmail(p, "closeout_request", {
+          vendor: i.vendor,
+          material: i.material,
+          docLabels: vendorDocs.map((d) => DOC_TYPE_LABEL[d]),
+          neededBy: i.neededBy ?? null,
+        });
+        const logged = {
+          id: `email_${randomUUID()}`,
+          direction: "outbound" as const,
+          party: i.vendor,
+          subject: email.subject,
+          body: email.body,
+          kind: "closeout_request" as const,
+          relatedId: i.submittalId ?? null,
+          status: "draft" as const,
+          createdAt: now,
+          updatedAt: now,
+          sentAt: null,
+        };
+        p.emails.push(logged);
+        activity(
+          p,
+          "request_closeout_docs",
+          `Requested closeout docs for ${i.material} from ${i.vendor} (${vendorDocs.length} vendor items).`,
+        );
+        saveProject(p);
+        return {
+          material: i.material,
+          stagingPath: staging,
+          created,
+          email: logged,
+          note: "Vendor docs marked 'requested'; as-built (Engineering) and warranty letter (UMI template) marked 'needed'. Send the drafted email, then mark it sent.",
+        };
+      }),
+  }),
+
+  def({
+    name: "log_closeout_doc_received",
+    description:
+      "Mark closeout doc(s) received for a material and stage them under 'PM Docs/All Closeout Docs/<material>'. Pass a docType to mark just one, or omit to mark all outstanding docs for that material received. Returns the staging path to drop the files into.",
+    input: z.object({
+      projectId: z.string(),
+      material: z.string(),
+      docType: z
+        .enum(["as_built", "o_and_m", "warranty_letter", "cut_sheet", "installation", "ada_cert", "test_report", "title_24", "other"])
+        .nullish(),
+      receivedFrom: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const now = new Date().toISOString();
+        const staging = stagingPath(i.material);
+        const matches = p.closeoutDocs.filter(
+          (d) =>
+            d.material === i.material &&
+            (i.docType ? d.docType === i.docType : true) &&
+            d.status !== "filed" &&
+            d.status !== "received",
+        );
+        if (!matches.length) return { error: `No outstanding closeout docs for ${i.material}${i.docType ? ` / ${i.docType}` : ""}.` };
+        for (const d of matches) {
+          d.status = "received";
+          d.receivedAt = now;
+          d.stagingPath = staging;
+          if (i.receivedFrom) d.requestedFrom = d.requestedFrom ?? i.receivedFrom;
+        }
+        activity(p, "log_closeout_doc_received", `Received ${matches.length} closeout doc(s) for ${i.material}.`);
+        saveProject(p);
+        return {
+          material: i.material,
+          received: matches.map((d) => d.docType),
+          stagingPath: staging,
+          hint: `Download the files into "${staging}". They'll move to the job closeout folder once the GC approves the submittal (file_closeout_docs).`,
+        };
+      }),
+  }),
+
+  def({
+    name: "file_closeout_docs",
+    description:
+      "Move a material's received closeout docs from the staging folder into the job's closeout folder. Do this once the GC RETURNS THE SUBMITTAL APPROVED. Returns the move manifest (from → to).",
+    input: z.object({
+      projectId: z.string(),
+      material: z.string(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const now = new Date().toISOString();
+        const target = jobCloseoutPath(p, i.material);
+        const matches = p.closeoutDocs.filter((d) => d.material === i.material && d.status === "received");
+        if (!matches.length) return { error: `No received (staged) closeout docs to file for ${i.material}. Log them received first.` };
+        const manifest = matches.map((d) => {
+          const from = d.stagingPath ?? stagingPath(i.material);
+          d.status = "filed";
+          d.filedAt = now;
+          d.jobPath = target;
+          return { docType: d.docType, from, to: target };
+        });
+        activity(p, "file_closeout_docs", `Filed ${matches.length} closeout doc(s) for ${i.material} → ${target}.`);
+        saveProject(p);
+        return { material: i.material, filed: manifest.length, to: target, manifest };
+      }),
+  }),
+
+  def({
+    name: "closeout_status",
+    description:
+      "Closeout documentation progress for the job: per-material counts (needed/requested/received/filed), overall outstanding, and which materials are staged and ready to file once their submittal is approved.",
+    input: z.object({ projectId: z.string() }),
+    handler: (i) => withProject(i.projectId, (p) => closeoutProgress(p)),
   }),
 
   // ----- briefing --------------------------------------------------------

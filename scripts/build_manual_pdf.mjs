@@ -188,8 +188,8 @@ bullets([
   "/open <projectId>  — reopen a saved job and get its next action",
   "/ingest <path-to-xlsx>  — import a FastPipe export into the active job",
   "/status  or  /next  — show the deterministic NEXT ACTION + OPEN QUESTIONS",
-  "/briefing  — what's on my plate: next action, tasks, emails, RFIs, inspections",
-  "/tasks  — list the job's to-dos (overdue first)   ·   /email  — logged emails",
+  "/briefing  — what's on my plate: next action, tasks, emails, RFIs, closeout",
+  "/tasks  — to-dos (overdue first)   ·   /email  — logged emails   ·   /closeout  — doc progress",
   "/projects  — list saved jobs   ·   /help  — banner   ·   /exit  — quit",
 ]);
 
@@ -198,7 +198,8 @@ para("Beyond estimating and bidding, the tool runs the job day-to-day:");
 bullets([
   "TASKS — a real action list (owner, due date, priority, status), separate from the install schedule. Overdue items surface first. Just tell the brain what you need to do, or who owns it.",
   "EMAIL (draft + track, never auto-sends) — it composes RFI, submittal, bid-proposal, change-order, schedule and procurement emails from the job's own data and logs them. You send by copy/paste, then it tracks 'awaiting reply'. Log incoming mail to keep correspondence in one place.",
-  "DAILY BRIEFING — one snapshot of the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, and upcoming inspections.",
+  "DAILY BRIEFING — one snapshot of the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, upcoming inspections, and closeout-doc status.",
+  "CLOSEOUT DOCS — request them WITH the submittal (As-builts from Engineering, O&Ms from the vendor for fixtures/equipment, Warranty Letter from the UMI template). Received docs stage under 'PM Docs/All Closeout Docs/<material>'; once the GC approves the submittal, they file into the job's closeout folder.",
 ]);
 para("Also tracked: RFIs, submittals, change orders, inspections, procurement, the install schedule, and a certified-payroll preview — all shown in the step-by-step demo on the following pages.", { color: MUTED });
 
