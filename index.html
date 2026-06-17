@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Money Man OS — Liquidity Maximizer</title>
+<style>
+  :root{--bg:#0b0e14;--panel:#141925;--line:#222a3a;--muted:#8a93a6;--ink:#e6e9ef;
+        --blue:#7aa2ff;--green:#2ecc71;--red:#ff6b6b;--gold:#ffcc00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+       padding:16px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;
+       background:rgba(11,14,20,.92);backdrop-filter:blur(6px);z-index:5}
+  .top h1{font-size:18px;margin:0}
+  .top .tag{color:var(--muted);font-size:12px}
+  .pill{padding:4px 12px;border-radius:999px;font-weight:700;color:#0b0e14}
+  .grow{flex:1}
+  .top input[type=date]{background:var(--panel);border:1px solid var(--line);
+       color:var(--ink);border-radius:8px;padding:6px 8px}
+  button{background:#1c2535;border:1px solid var(--line);color:var(--ink);
+       border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
+  button:hover{border-color:#33415c}
+  button.primary{background:var(--blue);color:#0b0e14;border-color:var(--blue);font-weight:700}
+  button.ghost{background:transparent}
+  .wrap{display:grid;grid-template-columns:minmax(340px,420px) 1fr;gap:18px;
+        padding:18px 22px;align-items:start}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .panel h2{font-size:12px;letter-spacing:.6px;text-transform:uppercase;
+       color:var(--muted);margin:2px 0 10px}
+  .row{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+  .row input,.row select{background:var(--bg);border:1px solid var(--line);
+       color:var(--ink);border-radius:7px;padding:6px;font-size:12px;min-width:0}
+  .row .x{flex:0 0 26px;padding:6px;color:var(--muted)}
+  .lbl{font-size:11px;color:var(--muted);margin:10px 0 4px}
+  .addbtn{font-size:12px;padding:5px 9px;margin-top:4px}
+  .two{display:flex;gap:8px}.two>div{flex:1}
+  .metrics{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+       padding:12px 16px;flex:1;min-width:140px}
+  .metric .v{font-size:22px;font-weight:700}.metric .k{color:var(--muted);font-size:12px}
+  .chart{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;margin:12px 0}
+  .alert{background:#2a1414;border:1px solid #5a2a2a;color:#ffb3b3;
+       padding:10px 14px;border-radius:10px;margin:8px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .card .r{display:flex;justify-content:space-between;font-weight:700}
+  .card .day{color:var(--muted)}.card .amt{font-size:16px}
+  .card .lbl2{font-weight:700;margin:2px 0 4px}.card .why{color:#aeb6c6;font-size:12.5px}
+  .block{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+       padding:12px 16px;margin:14px 0}
+  .block h3{margin:0 0 8px;font-size:14px}
+  .util{margin:8px 0}.uname{font-size:12px;color:#aeb6c6;margin-bottom:4px}
+  .bar{position:relative;background:var(--bg);border-radius:6px;height:18px;margin:3px 0}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;display:block}
+  .bar b{position:absolute;right:6px;top:0;font-size:11px;line-height:18px}
+  ul{margin:6px 0;padding-left:18px}li{font-size:12.5px;color:#aeb6c6}
+  h2.sec{font-size:12px;color:var(--muted);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+  .foot{color:var(--muted);font-size:12px;margin:18px 0 30px}
+  .saved{color:var(--green);font-size:12px;opacity:0;transition:opacity .3s}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>Money Man OS</h1>
+    <span class="tag">Liquidity Maximizer</span>
+    <span id="status" class="pill">—</span>
+    <span class="grow"></span>
+    <label class="tag">as of <input type="date" id="today"></label>
+    <button class="ghost" id="exGood">Example: good week</button>
+    <button class="ghost" id="exTight">Example: tight week</button>
+    <button class="ghost" id="clear">Clear all</button>
+    <span class="saved" id="saved">saved ✓</span>
+  </div>
+
+  <div class="wrap">
+    <!-- INPUTS -->
+    <div class="panel">
+      <h2>Your money — edit to your real numbers</h2>
+      <div class="two">
+        <div><div class="lbl">Checking balance</div>
+          <input type="number" id="balance" step="1"></div>
+        <div><div class="lbl">Safety buffer (never go below)</div>
+          <input type="number" id="buffer" step="1"></div>
+      </div>
+
+      <div class="lbl">Income (gig is low confidence; payroll is high)</div>
+      <div id="incomes"></div>
+      <button class="addbtn" data-add="income">+ income</button>
+
+      <div class="lbl">Bills</div>
+      <div id="bills"></div>
+      <button class="addbtn" data-add="bill">+ bill</button>
+
+      <div class="lbl">Credit cards</div>
+      <div id="cards"></div>
+      <button class="addbtn" data-add="card">+ card</button>
+
+      <p class="foot">Everything stays in this browser (localStorage). Money Man
+        recommends; it never moves a dollar. Bank-linking auto-fill comes later —
+        for now, type or paste your numbers.</p>
+    </div>
+
+    <!-- OUTPUT -->
+    <div id="out"></div>
+  </div>
+
+<script src="engine.js"></script>
+<script>
+(function(){
+  const MM = window.MoneyMan;
+  const $ = (s,r=document)=>r.querySelector(s);
+  const el = (t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
+  const KINDS = ["rent","utility","insurance","loan","phone","bill"];
+  const todayISO = ()=> new Date().toISOString().slice(0,10);
+  const plus = (iso,n)=> isoPlus(iso,n);
+  function isoPlus(iso,n){const d=new Date(iso+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+
+  let state = load() || example("good");
+
+  // ---------- examples (dates relative to chosen 'today') ---------------- //
+  function example(kind){
+    const T = todayISO();
+    const inc = [
+      {date:plus(T,1),  amount:165, source:"DoorDash",          confidence:0.60, is_1099:true},
+      {date:plus(T,3),  amount:300, source:"Part-time payroll", confidence:0.97, is_1099:false},
+      {date:plus(T,6),  amount:480, source:"Plumb Bob job",     confidence:0.90, is_1099:true},
+      {date:plus(T,8),  amount:150, source:"DoorDash",          confidence:0.55, is_1099:true},
+      {date:plus(T,16), amount:300, source:"Part-time payroll", confidence:0.97, is_1099:false},
+    ];
+    const bills = [
+      {name:"PG&E electric", amount:120, due_date:plus(T,7),  kind:"utility",  credit_impact:false, shutoff_or_lapse:true},
+      {name:"Car insurance", amount:140, due_date:plus(T,9),  kind:"insurance",credit_impact:false, shutoff_or_lapse:true},
+      {name:"Phone",         amount:85,  due_date:plus(T,13), kind:"phone",    credit_impact:false, shutoff_or_lapse:false},
+      {name:"Rent",          amount:1200,due_date:plus(T,14), kind:"rent",     credit_impact:false, shutoff_or_lapse:false},
+      {name:"Auto loan",     amount:310, due_date:plus(T,18), kind:"loan",     credit_impact:true,  shutoff_or_lapse:false},
+    ];
+    const cards = [
+      {name:"Apex Visa",  balance:710, limit:1000, statement_close:plus(T,11), due_date:plus(T,28), min_payment:35, apr:29.99},
+      {name:"Summit Card",balance:300, limit:500,  statement_close:plus(T,15), due_date:plus(T,33), min_payment:25, apr:26.99},
+    ];
+    return {today:T, account:{balance: kind==="tight"?640:1900, buffer:200},
+            incomes:inc, bills:bills, cards:cards};
+  }
+
+  // ---------- persistence ------------------------------------------------- //
+  function save(){try{localStorage.setItem("moneyman", JSON.stringify(state));flashSaved();}catch(e){/* private mode / file:// — keep working in-memory */}}
+  function load(){try{return JSON.parse(localStorage.getItem("moneyman"));}catch(e){return null;}}
+  let savedT; function flashSaved(){const s=$("#saved");s.style.opacity=1;clearTimeout(savedT);savedT=setTimeout(()=>s.style.opacity=0,900);}
+
+  // ---------- input rendering -------------------------------------------- //
+  function renderInputs(){
+    $("#today").value = state.today;
+    $("#balance").value = state.account.balance;
+    $("#buffer").value = state.account.buffer;
+
+    const inc = $("#incomes"); inc.innerHTML="";
+    state.incomes.forEach((e,i)=>{
+      const r=el("div","row"); r.dataset.kind="income"; r.dataset.i=i;
+      r.innerHTML =
+        `<input type="date" data-f="date" value="${e.date}" style="flex:2 1 120px">
+         <input type="number" data-f="amount" value="${e.amount}" placeholder="$" style="flex:1 1 64px">
+         <input type="text" data-f="source" value="${e.source}" placeholder="source" style="flex:2 1 90px">
+         <input type="number" data-f="confidence" value="${e.confidence}" step="0.05" min="0" max="1" title="confidence 0-1" style="flex:1 1 56px">
+         <label class="tag" title="1099 / gig"><input type="checkbox" data-f="is_1099" ${e.is_1099?"checked":""}>1099</label>
+         <button class="x" data-del>✕</button>`;
+      inc.appendChild(r);
+    });
+
+    const bl = $("#bills"); bl.innerHTML="";
+    state.bills.forEach((b,i)=>{
+      const r=el("div","row"); r.dataset.kind="bill"; r.dataset.i=i;
+      r.innerHTML =
+        `<input type="text" data-f="name" value="${b.name}" placeholder="name" style="flex:2 1 90px">
+         <input type="number" data-f="amount" value="${b.amount}" placeholder="$" style="flex:1 1 60px">
+         <input type="date" data-f="due_date" value="${b.due_date}" style="flex:2 1 120px">
+         <select data-f="kind" style="flex:1 1 80px">${KINDS.map(k=>`<option ${k===b.kind?"selected":""}>${k}</option>`).join("")}</select>
+         <label class="tag" title="reports to credit bureaus"><input type="checkbox" data-f="credit_impact" ${b.credit_impact?"checked":""}>credit</label>
+         <label class="tag" title="shutoff / lapse risk"><input type="checkbox" data-f="shutoff_or_lapse" ${b.shutoff_or_lapse?"checked":""}>shutoff</label>
+         <button class="x" data-del>✕</button>`;
+      bl.appendChild(r);
+    });
+
+    const cd = $("#cards"); cd.innerHTML="";
+    state.cards.forEach((c,i)=>{
+      const r=el("div","row"); r.dataset.kind="card"; r.dataset.i=i;
+      r.innerHTML =
+        `<input type="text" data-f="name" value="${c.name}" placeholder="card" style="flex:2 1 90px">
+         <input type="number" data-f="balance" value="${c.balance}" placeholder="bal" title="balance" style="flex:1 1 56px">
+         <input type="number" data-f="limit" value="${c.limit}" placeholder="limit" title="limit" style="flex:1 1 56px">
+         <label class="tag">closes <input type="date" data-f="statement_close" value="${c.statement_close}"></label>
+         <label class="tag">due <input type="date" data-f="due_date" value="${c.due_date}"></label>
+         <input type="number" data-f="min_payment" value="${c.min_payment}" placeholder="min" title="min payment" style="flex:1 1 56px">
+         <button class="x" data-del>✕</button>`;
+      cd.appendChild(r);
+    });
+  }
+
+  // ---------- read DOM back into state ----------------------------------- //
+  function readState(){
+    state.today = $("#today").value || todayISO();
+    state.account.balance = num($("#balance").value);
+    state.account.buffer = num($("#buffer").value);
+    state.incomes = rows("#incomes").map(r=>({
+      date:f(r,"date"), amount:num(f(r,"amount")), source:f(r,"source"),
+      confidence:num(f(r,"confidence")), is_1099:chk(r,"is_1099")}));
+    state.bills = rows("#bills").map(r=>({
+      name:f(r,"name"), amount:num(f(r,"amount")), due_date:f(r,"due_date"),
+      kind:f(r,"kind"), credit_impact:chk(r,"credit_impact"),
+      shutoff_or_lapse:chk(r,"shutoff_or_lapse")}));
+    state.cards = rows("#cards").map(r=>({
+      name:f(r,"name"), balance:num(f(r,"balance")), limit:num(f(r,"limit")),
+      statement_close:f(r,"statement_close"), due_date:f(r,"due_date"),
+      min_payment:num(f(r,"min_payment")), apr:0}));
+  }
+  const rows=(sel)=>Array.from(document.querySelectorAll(sel+" > .row"));
+  const f=(r,k)=>{const e=r.querySelector(`[data-f="${k}"]`);return e?e.value:"";};
+  const chk=(r,k)=>{const e=r.querySelector(`[data-f="${k}"]`);return e?e.checked:false;};
+  const num=(v)=>{const n=parseFloat(v);return isFinite(n)?n:0;};
+
+  // ---------- output rendering ------------------------------------------- //
+  function recompute(){
+    let plan;
+    try{ plan = MM.buildPlan(state.account, state.incomes, state.bills, state.cards, state.today); }
+    catch(err){ $("#out").innerHTML = `<div class="alert">Couldn't compute: ${err.message}. Check your dates and numbers.</div>`; return; }
+    renderOutput(plan);
+    const pill=$("#status"); pill.textContent=plan.status;
+    pill.style.background = plan.status==="SAFE"?"var(--green)":plan.status==="TIGHT"?"var(--gold)":"var(--red)";
+    save();
+  }
+
+  function renderOutput(p){
+    const M=MM.money, F=MM.fmtDay, P=MM.pct;
+    const metric=(v,k)=>`<div class="metric"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+    let h = `<div class="metrics">
+      ${metric(M(p.safe_to_spend),"safe to spend now")}
+      ${metric(p.runway_days===null?"—":p.runway_days+"d","confirmed cash runway")}
+      ${metric(M(p.min_low_safe),"lowest point · "+F(p.min_low_safe_date))}
+      ${metric(M(p.tax_set_aside),"park for taxes")}
+    </div>`;
+
+    p.alerts.forEach(a=> h += `<div class="alert">⚠ ${a}</div>`);
+
+    h += `<div class="chart">${svg(p)}
+      <div class="k" style="color:var(--muted);padding:2px 8px 4px">Blue = projected
+      balance (expected income). Dashed = worst-case on confirmed income only.
+      Green dots = income. Red band = below your buffer.</div></div>`;
+
+    h += `<h2 class="sec">The plan — exact day to pay each thing</h2><div class="grid2">`;
+    p.payments.forEach(pay=>{
+      const col = pay.credit_impact ? "var(--red)" : "var(--blue)";
+      h += `<div class="card"><div class="r"><span class="day">${F(pay.date)}</span>
+        <span class="amt">${M(pay.amount)}</span></div>
+        <div class="lbl2" style="color:${col}">${pay.label}</div>
+        <div class="why">${pay.reason}</div></div>`;
+    });
+    h += `</div>`;
+
+    const moves = p.payments.filter(x=>x.util_after!==undefined);
+    if(moves.length){
+      h += `<div class="block"><h3>Credit — reported utilization</h3>`;
+      moves.forEach(m=>{
+        const wb=Math.round(m.util_before*100), wa=Math.round(m.util_after*100);
+        h += `<div class="util"><div class="uname">${m.label.split(" -")[0]}</div>
+          <div class="bar"><i style="width:${Math.min(wb,100)}%;background:var(--red)"></i><b>${wb}%</b></div>
+          <div class="bar"><i style="width:${Math.min(wa,100)}%;background:var(--green)"></i><b>${wa}%</b></div></div>`;
+      });
+      h += `</div>`;
+    }
+
+    if(p.tax_notes.length){
+      h += `<div class="block"><h3>Taxes — set aside ${M(p.tax_set_aside)}</h3><ul>${
+        p.tax_notes.map(n=>`<li>${n}</li>`).join("")}</ul></div>`;
+    }
+    if(p.notes.length){
+      h += `<div class="block"><h3>Notes</h3><ul>${
+        p.notes.map(n=>`<li>${n}</li>`).join("")}</ul></div>`;
+    }
+    h += `<p class="foot">Money Man recommends; it never moves a dollar without your say-so.</p>`;
+    $("#out").innerHTML = h;
+  }
+
+  function svg(p){
+    const W=860,H=300,pl=46,pr=16,pt=16,pb=26;
+    const se=p.series_expected, ss=p.series_safe;
+    const vals=[]; se.forEach(r=>{vals.push(r.bal,r.low);}); ss.forEach(r=>vals.push(r.low));
+    vals.push(p.account.buffer,0);
+    let vmin=Math.min(...vals), vmax=Math.max(...vals); if(vmax===vmin)vmax=vmin+1;
+    const n=se.length;
+    const X=i=>pl+(W-pl-pr)*(i/Math.max(1,n-1));
+    const Y=v=>pt+(H-pt-pb)*(1-(v-vmin)/(vmax-vmin));
+    const path=(s,key)=> "M"+s.map((r,i)=>`${X(i).toFixed(1)},${Y(key==="low"?r.low:r.bal).toFixed(1)}`).join(" L");
+    const by=Y(p.account.buffer), zy=Y(0);
+    let dots="";
+    se.forEach((r,i)=>{ p.incomes.forEach(e=>{ if(MM.diffDays(e.date,r.date)===0)
+      dots+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(r.bal).toFixed(1)}" r="4" fill="#2ecc71"><title>${e.source} +${MM.money(e.amount)} (conf ${Math.round(e.confidence*100)}%)</title></circle>`; }); });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%">
+      <rect x="${pl}" y="${by.toFixed(1)}" width="${W-pl-pr}" height="${Math.max(0,zy-by).toFixed(1)}" fill="#ff3b3b" opacity="0.10"/>
+      <path d="${path(se,'bal')}" fill="none" stroke="#7aa2ff" stroke-width="2"/>
+      <path d="${path(ss,'low')}" fill="none" stroke="#3a4a6a" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <line x1="${pl}" y1="${by.toFixed(1)}" x2="${W-pr}" y2="${by.toFixed(1)}" stroke="#ffcc00" stroke-dasharray="5,4" stroke-width="1.5"/>
+      <text x="${pl+4}" y="${(by-5).toFixed(1)}" fill="#ffcc00" font-size="11">buffer ${MM.money(p.account.buffer)}</text>
+      ${dots}
+      <text x="${pl}" y="${H-8}" fill="#8a93a6" font-size="11">${MM.fmtDay(p.today)}</text>
+      <text x="${W-pr-58}" y="${H-8}" fill="#8a93a6" font-size="11">${MM.fmtDay(p.horizon)}</text>
+    </svg>`;
+  }
+
+  // ---------- events ------------------------------------------------------ //
+  document.addEventListener("input", e=>{
+    if(e.target.closest(".row")||["balance","buffer","today"].includes(e.target.id)){
+      readState(); recompute();
+    }
+  });
+  document.addEventListener("change", e=>{
+    if((e.target.type==="checkbox"||e.target.tagName==="SELECT") && e.target.closest(".row")){
+      readState(); recompute();
+    }
+  });
+  document.addEventListener("click", e=>{
+    const del=e.target.closest("[data-del]");
+    if(del){const r=del.closest(".row");const k=r.dataset.kind;const i=+r.dataset.i;
+      readState(); state[k==="income"?"incomes":k==="bill"?"bills":"cards"].splice(i,1);
+      renderInputs(); recompute(); return;}
+    const add=e.target.closest("[data-add]");
+    if(add){readState();const T=state.today;
+      if(add.dataset.add==="income") state.incomes.push({date:plus(T,7),amount:100,source:"New income",confidence:0.6,is_1099:false});
+      if(add.dataset.add==="bill")   state.bills.push({name:"New bill",amount:50,due_date:plus(T,10),kind:"bill",credit_impact:false,shutoff_or_lapse:false});
+      if(add.dataset.add==="card")   state.cards.push({name:"New card",balance:0,limit:500,statement_close:plus(T,12),due_date:plus(T,30),min_payment:25,apr:0});
+      renderInputs(); recompute();}
+  });
+  $("#exGood").onclick =()=>{state=example("good");renderInputs();recompute();};
+  $("#exTight").onclick=()=>{state=example("tight");renderInputs();recompute();};
+  $("#clear").onclick  =()=>{state={today:todayISO(),account:{balance:0,buffer:200},incomes:[],bills:[],cards:[]};renderInputs();recompute();};
+
+  // ---------- go ---------------------------------------------------------- //
+  if(!state.today) state.today = todayISO();
+  renderInputs(); recompute();
+})();
+</script>
+</body>
+</html>
