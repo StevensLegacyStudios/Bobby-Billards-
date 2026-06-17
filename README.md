@@ -94,8 +94,18 @@ npm test            # unit tests for the deterministic engine + ingest (no API c
 npm run e2e         # full tool→engine→store loop end-to-end, deterministic (no API key needed)
 npm run typecheck   # tsc --noEmit
 npm run build       # compile to dist/
+npm run serve:ms    # Microsoft 365 (Hybrid) email-extraction service — Power Automate calls POST /extract
 npx tsx scripts/make_sample.ts   # regenerate samples/sample_fastpipe.xlsx
 ```
+
+## Microsoft 365 (Hybrid)
+
+For United Mechanical's day-to-day "buried in email" problem, the agent ports into
+Microsoft 365 the Hybrid way: Power Automate + SharePoint + Outlook handle low-code
+capture/routing/auto-emails, and the Claude brain (`src/microsoft/`) reads each email and
+extracts structured fields. Provision the 8 SharePoint lists with
+`scripts/provision-sharepoint.ps1`, deploy the `npm run serve:ms` extraction service, and
+wire Power Automate Flow 1 to it. Full runbook: **[docs/MICROSOFT_365_BUILD.md](docs/MICROSOFT_365_BUILD.md)**.
 
 ## Roadmap
 
