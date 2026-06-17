@@ -86,6 +86,9 @@ To quit: type `/exit` (or `Ctrl-C`).
 | `/open <projectId>` | Reopen a saved job and get its next action. |
 | `/ingest <path-to-xlsx>` | Import a FastPipe export into the active job. |
 | `/status` or `/next` | Show the deterministic **NEXT ACTION + OPEN QUESTIONS** for the active job. |
+| `/briefing` | The "what's on my plate" snapshot: next action, tasks, emails, RFIs, inspections. |
+| `/tasks` | List the job's to-dos (overdue first). |
+| `/email` | List logged emails (drafts + awaiting reply). |
 | `/projects` | List every saved job with its stage and open-question count. |
 | `/help` | Reprint the banner. |
 | `/exit` | Quit. |
@@ -111,6 +114,31 @@ That footer is computed by code, not the model — it's your source of truth for
 next."
 
 ---
+
+## 4b. Tasks, email & the daily briefing
+
+The tool doesn't stop at bidding — it runs the job day-to-day.
+
+**Tasks (your action list).** Real to-dos with an **owner, due date, priority, and
+status** — separate from the install schedule. Just tell the brain *"add a task: confirm
+the foreman CBA rate, high priority, due Friday"* or *"mark the grid-line-C walk done."*
+Overdue items always surface first, and they show up in the footer and `/briefing`.
+
+**Email — draft and track, never auto-send.** Ask for *"draft the proposal email to the
+GC"* (or an RFI / submittal / change-order / schedule / procurement email) and it
+**composes a professional message from the job's own data** and logs it as a draft. You
+review it, send it from your real email by copy/paste, and tell the tool *"mark it
+sent."* From then on it's tracked as **awaiting reply** until you log the response. This
+is deliberate: the tool stays local and never reaches outside your machine.
+
+**Daily briefing.** `/briefing` (or *"what's on my plate?"*) rolls up the entire job in
+one view — stage + next action, open/overdue tasks, emails awaiting reply, open
+RFIs/submittals, and upcoming inspections.
+
+Everything else the tool tracks — RFIs, submittals, change orders, inspections,
+procurement, the install schedule, and a certified-payroll preview — works the same way:
+just describe what happened and the brain records it. The `npm run demo` walkthrough
+exercises all of it end to end.
 
 ## 5. The job lifecycle (stages)
 
@@ -239,5 +267,5 @@ npm run build       # compile to dist/
 npm start           # run the compiled build
 ```
 
-In the app: `/new`, `/open`, `/ingest`, `/status` (`/next`), `/projects`, `/help`,
-`/exit`.
+In the app: `/new`, `/open`, `/ingest`, `/status` (`/next`), `/briefing`, `/tasks`,
+`/email`, `/projects`, `/help`, `/exit`.

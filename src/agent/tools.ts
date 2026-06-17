@@ -3,10 +3,12 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { bidDefaults, scopeCatalog, stageById } from "../kb.js";
 import { computeBid } from "../engine/bid.js";
+import { draftEmail, type EmailKind } from "../engine/email.js";
 import { computeGaps, STAGE_ORDER } from "../engine/gaps.js";
 import { computeLabor } from "../engine/labor.js";
 import { certifiedPayrollSummary } from "../engine/payroll.js";
 import { computeSchedule } from "../engine/schedule.js";
+import { buildBriefing, taskBuckets } from "../engine/tasks.js";
 import { findWageRow, loadedRate } from "../engine/wages.js";
 import { parseFastpipeExcel, rollupLineItems } from "../ingest/fastpipe.js";
 import { createProject } from "../factory.js";
@@ -25,6 +27,10 @@ import { listProjects, loadProject, saveProject } from "../store/projects.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function activity(
@@ -664,6 +670,238 @@ const tools: ToolDef<z.ZodTypeAny>[] = [
         saveProject(p);
         return { advanced: true, currentStage: nextStage, gaps: computeGaps(p) };
       }),
+  }),
+
+  // ----- tasks (to-do list) ----------------------------------------------
+
+  def({
+    name: "add_task",
+    description:
+      "Add a tracked to-do to the job's action list (owner, due date, priority, status). Use for follow-ups the PM must do — e.g. 'confirm foreman CBA rate', 'order backflow assembly'. Distinct from the install schedule.",
+    input: z.object({
+      projectId: z.string(),
+      title: z.string(),
+      detail: z.string().nullish(),
+      assignee: z.string().nullish(),
+      due: z.string().nullish(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+      stage: z.string().nullish(),
+      source: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const task = {
+          id: `task_${randomUUID()}`,
+          title: i.title,
+          detail: i.detail ?? null,
+          assignee: i.assignee ?? null,
+          due: i.due ?? null,
+          priority: i.priority,
+          status: "open" as const,
+          stage: i.stage ?? p.workflowStatus.currentStage,
+          source: i.source ?? "manual",
+          createdAt: new Date().toISOString(),
+          completedAt: null,
+        };
+        p.tasks.push(task);
+        activity(p, "add_task", `Task: ${i.title}${i.assignee ? ` → ${i.assignee}` : ""}`);
+        saveProject(p);
+        return { task, openTaskCount: p.tasks.filter((t) => t.status !== "done").length };
+      }),
+  }),
+
+  def({
+    name: "update_task",
+    description:
+      "Update a to-do: change status (open|in_progress|blocked|done), reassign, reschedule, or re-prioritize. Marking done stamps completedAt.",
+    input: z.object({
+      projectId: z.string(),
+      taskId: z.string(),
+      status: z.enum(["open", "in_progress", "blocked", "done"]).nullish(),
+      assignee: z.string().nullish(),
+      due: z.string().nullish(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).nullish(),
+      title: z.string().nullish(),
+      detail: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const t = p.tasks.find((x) => x.id === i.taskId);
+        if (!t) return { error: `No task ${i.taskId}.` };
+        if (i.status) {
+          t.status = i.status;
+          t.completedAt = i.status === "done" ? new Date().toISOString() : null;
+        }
+        if (i.assignee !== undefined && i.assignee !== null) t.assignee = i.assignee;
+        if (i.due !== undefined && i.due !== null) t.due = i.due;
+        if (i.priority) t.priority = i.priority;
+        if (i.title) t.title = i.title;
+        if (i.detail !== undefined && i.detail !== null) t.detail = i.detail;
+        activity(p, "update_task", `Task "${t.title}" → ${t.status}`);
+        saveProject(p);
+        return { task: t };
+      }),
+  }),
+
+  def({
+    name: "list_tasks",
+    description:
+      "List the job's to-dos, ordered overdue-first then by priority. Returns open/overdue/due-today buckets. Filter by status or assignee.",
+    input: z.object({
+      projectId: z.string(),
+      status: z.enum(["open", "in_progress", "blocked", "done"]).nullish(),
+      assignee: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const b = taskBuckets(p, todayISO());
+        let open = b.open;
+        if (i.status) open = p.tasks.filter((t) => t.status === i.status);
+        if (i.assignee) open = open.filter((t) => t.assignee === i.assignee);
+        return {
+          tasks: open,
+          counts: { open: b.open.length, overdue: b.overdue.length, dueToday: b.dueToday.length, done: b.done.length },
+        };
+      }),
+  }),
+
+  // ----- email (draft & track; no external send) -------------------------
+
+  def({
+    name: "draft_email",
+    description:
+      "Compose and LOG an outbound email tied to the job (RFI, submittal, bid proposal, change order, schedule, procurement, or general). Draft-and-track only — it does NOT send; the human sends by copy/paste. If you don't pass subject/body, a professional draft is generated from job state.",
+    input: z.object({
+      projectId: z.string(),
+      kind: z
+        .enum(["general", "rfi", "submittal", "bid", "change_order", "schedule", "inspection", "procurement"])
+        .default("general"),
+      to: z.string().nullish(),
+      subject: z.string().nullish(),
+      body: z.string().nullish(),
+      relatedId: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const tpl = draftEmail(p, i.kind as EmailKind, i.relatedId ?? null);
+        const now = new Date().toISOString();
+        const email = {
+          id: `email_${randomUUID()}`,
+          direction: "outbound" as const,
+          party: i.to ?? tpl.party,
+          subject: i.subject ?? tpl.subject,
+          body: i.body ?? tpl.body,
+          kind: i.kind,
+          relatedId: i.relatedId ?? null,
+          status: "draft" as const,
+          createdAt: now,
+          updatedAt: now,
+          sentAt: null,
+        };
+        p.emails.push(email);
+        activity(p, "draft_email", `Drafted ${i.kind} email to ${email.party}: ${email.subject}`);
+        saveProject(p);
+        return { email, hint: "Review, then mark it sent with update_email_status once you've sent it." };
+      }),
+  }),
+
+  def({
+    name: "update_email_status",
+    description:
+      "Update a logged email's status: draft → sent (after you actually send it), then replied or archived. Marking sent stamps sentAt; 'awaiting reply' = outbound + sent.",
+    input: z.object({
+      projectId: z.string(),
+      emailId: z.string(),
+      status: z.enum(["draft", "sent", "received", "replied", "archived"]),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const e = p.emails.find((x) => x.id === i.emailId);
+        if (!e) return { error: `No email ${i.emailId}.` };
+        e.status = i.status;
+        e.updatedAt = new Date().toISOString();
+        if (i.status === "sent" && !e.sentAt) e.sentAt = e.updatedAt;
+        activity(p, "update_email_status", `Email "${e.subject}" → ${i.status}`);
+        saveProject(p);
+        return { email: e };
+      }),
+  }),
+
+  def({
+    name: "log_inbound_email",
+    description:
+      "Record an inbound email the human received (from the GC, architect, owner, vendor), optionally linking it to an RFI/submittal/etc. Use to keep the job's correspondence in one place.",
+    input: z.object({
+      projectId: z.string(),
+      from: z.string(),
+      subject: z.string(),
+      body: z.string().nullish(),
+      kind: z
+        .enum(["general", "rfi", "submittal", "bid", "change_order", "schedule", "inspection", "procurement"])
+        .default("general"),
+      relatedId: z.string().nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        const now = new Date().toISOString();
+        const email = {
+          id: `email_${randomUUID()}`,
+          direction: "inbound" as const,
+          party: i.from,
+          subject: i.subject,
+          body: i.body ?? "",
+          kind: i.kind,
+          relatedId: i.relatedId ?? null,
+          status: "received" as const,
+          createdAt: now,
+          updatedAt: now,
+          sentAt: null,
+        };
+        p.emails.push(email);
+        // If it answers an outbound thread, mark that one replied.
+        if (i.relatedId) {
+          const out = p.emails.find(
+            (x) => x.direction === "outbound" && x.relatedId === i.relatedId && x.status === "sent",
+          );
+          if (out) {
+            out.status = "replied";
+            out.updatedAt = now;
+          }
+        }
+        activity(p, "log_inbound_email", `Inbound from ${i.from}: ${i.subject}`);
+        saveProject(p);
+        return { email };
+      }),
+  }),
+
+  def({
+    name: "list_emails",
+    description: "List logged emails for the job, optionally filtered by status or direction.",
+    input: z.object({
+      projectId: z.string(),
+      status: z.enum(["draft", "sent", "received", "replied", "archived"]).nullish(),
+      direction: z.enum(["outbound", "inbound"]).nullish(),
+    }),
+    handler: (i) =>
+      withProject(i.projectId, (p) => {
+        let emails = p.emails;
+        if (i.status) emails = emails.filter((e) => e.status === i.status);
+        if (i.direction) emails = emails.filter((e) => e.direction === i.direction);
+        return {
+          emails: emails.map(({ body, ...rest }) => ({ ...rest, bodyPreview: body.slice(0, 120) })),
+          awaitingReplies: p.emails.filter((e) => e.direction === "outbound" && e.status === "sent").length,
+        };
+      }),
+  }),
+
+  // ----- briefing --------------------------------------------------------
+
+  def({
+    name: "daily_briefing",
+    description:
+      "The 'what's on my plate' snapshot for the whole job: current stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, and upcoming inspections. Call this when the user asks what's going on or what to do today.",
+    input: z.object({ projectId: z.string() }),
+    handler: (i) => withProject(i.projectId, (p) => buildBriefing(p, todayISO())),
   }),
 ];
 

@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 import { Agent } from "./agent/loop.js";
 import { computeGaps } from "./engine/gaps.js";
+import { buildBriefing, taskBuckets } from "./engine/tasks.js";
 import { REGIONS } from "./schema/project.js";
 import { listProjects, loadProject } from "./store/projects.js";
 
@@ -14,6 +15,9 @@ Type a message, or use a command:
   /open <projectId>          open a project and get the next action
   /ingest <path-to-xlsx>     import a FastPipe export into the active project
   /status | /next            show NEXT ACTION + OPEN QUESTIONS (deterministic)
+  /briefing                  what's on my plate: next action, tasks, emails, RFIs
+  /tasks                     list the job's to-dos (overdue first)
+  /email                     list logged emails (drafts + awaiting reply)
   /projects                  list saved projects
   /help                      show this help
   /exit                      quit
@@ -29,12 +33,75 @@ function renderGapFooter(projectId: string | null): void {
   const project = loadProject(projectId);
   if (!project) return;
   const gaps = computeGaps(project);
+  const today = new Date().toISOString().slice(0, 10);
+  const buckets = taskBuckets(project, today);
+  const awaiting = project.emails.filter(
+    (e) => e.direction === "outbound" && e.status === "sent",
+  ).length;
   stdout.write(`\n\x1b[1m[${project.name} · ${gaps.currentStageLabel}]\x1b[0m\n`);
   stdout.write(`NEXT ACTION: ${gaps.nextAction}\n`);
   if (gaps.blockingQuestions.length) {
     stdout.write("OPEN QUESTIONS:\n");
     for (const q of gaps.blockingQuestions) stdout.write(`  • ${q}\n`);
   }
+  if (buckets.open.length) {
+    const od = buckets.overdue.length ? ` (${buckets.overdue.length} overdue)` : "";
+    stdout.write(`TASKS: ${buckets.open.length} open${od}\n`);
+    for (const t of buckets.open.slice(0, 3))
+      stdout.write(`  • [${t.priority}] ${t.title}${t.assignee ? ` → ${t.assignee}` : ""}${t.due ? ` (due ${t.due})` : ""}\n`);
+  }
+  if (awaiting) stdout.write(`AWAITING REPLY: ${awaiting} email(s)\n`);
+}
+
+function renderTasks(projectId: string | null): void {
+  if (!projectId) return void stdout.write("No active project. /open <id> or /new.\n");
+  const project = loadProject(projectId);
+  if (!project) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const b = taskBuckets(project, today);
+  stdout.write(
+    `\n\x1b[1mTasks — ${project.name}\x1b[0m  (${b.open.length} open · ${b.overdue.length} overdue · ${b.done.length} done)\n`,
+  );
+  if (!b.open.length) stdout.write("  (no open tasks — add one by telling the brain)\n");
+  for (const t of b.open) {
+    const od = t.due && t.due < today ? " \x1b[31mOVERDUE\x1b[0m" : "";
+    stdout.write(
+      `  ${t.status === "in_progress" ? "▸" : t.status === "blocked" ? "✗" : "○"} [${t.priority}] ${t.title}` +
+        `${t.assignee ? ` → ${t.assignee}` : ""}${t.due ? ` (due ${t.due})` : ""}${od}\n`,
+    );
+  }
+}
+
+function renderEmails(projectId: string | null): void {
+  if (!projectId) return void stdout.write("No active project. /open <id> or /new.\n");
+  const project = loadProject(projectId);
+  if (!project) return;
+  const awaiting = project.emails.filter((e) => e.direction === "outbound" && e.status === "sent").length;
+  stdout.write(
+    `\n\x1b[1mEmails — ${project.name}\x1b[0m  (${project.emails.length} total · ${awaiting} awaiting reply)\n`,
+  );
+  if (!project.emails.length) stdout.write("  (none yet — draft one by telling the brain)\n");
+  for (const e of project.emails) {
+    const arrow = e.direction === "outbound" ? "→" : "←";
+    stdout.write(`  ${arrow} [${e.status}] ${e.party}  ·  ${e.subject}\n`);
+  }
+}
+
+function renderBriefing(projectId: string | null): void {
+  if (!projectId) return void stdout.write("No active project. /open <id> or /new.\n");
+  const project = loadProject(projectId);
+  if (!project) return;
+  const br = buildBriefing(project, new Date().toISOString().slice(0, 10));
+  stdout.write(`\n\x1b[1m═══ Briefing — ${project.name} · ${br.stage} ═══\x1b[0m\n`);
+  stdout.write(`NEXT ACTION: ${br.nextAction}\n`);
+  stdout.write(
+    `TASKS: ${br.tasks.open} open` +
+      `${br.tasks.overdue ? `, ${br.tasks.overdue} overdue` : ""}` +
+      `${br.tasks.dueToday ? `, ${br.tasks.dueToday} due today` : ""}\n`,
+  );
+  for (const t of br.tasks.top) stdout.write(`  • [${t.priority}] ${t.title}${t.due ? ` (due ${t.due})` : ""}\n`);
+  stdout.write(`EMAIL: ${br.email.drafts} draft(s), ${br.email.awaitingReplies} awaiting reply\n`);
+  stdout.write(`RFIs open: ${br.rfis.open}  ·  Submittals pending: ${br.submittals.pending}  ·  Inspections upcoming: ${br.inspections.upcoming}\n`);
 }
 
 function parseNew(line: string): { name: string; region: string } | null {
@@ -78,6 +145,16 @@ async function handleCommand(line: string): Promise<boolean> {
     case "/next":
       if (!agent.activeProjectId) stdout.write("No active project. /open <id> or /new.\n");
       else renderGapFooter(agent.activeProjectId);
+      return true;
+    case "/briefing":
+      renderBriefing(agent.activeProjectId);
+      return true;
+    case "/tasks":
+      renderTasks(agent.activeProjectId);
+      return true;
+    case "/email":
+    case "/emails":
+      renderEmails(agent.activeProjectId);
       return true;
     case "/new": {
       const parsed = parseNew(line);

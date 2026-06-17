@@ -114,4 +114,33 @@ ok("estimate persisted", reloaded.estimate.rollups.laborHours === 338.5);
 ok("crew persisted", reloaded.labor.crew.length === 3);
 ok("activity log recorded", reloaded.activityLog.length > 0);
 
+// 10. Tasks: add, surface overdue, complete.
+const task = call("add_task", {
+  projectId,
+  title: "Confirm foreman & apprentice CBA rates",
+  priority: "high",
+  due: "2020-01-01",
+});
+ok("add_task returns a task id", typeof task.task.id === "string");
+const tlist = call("list_tasks", { projectId });
+ok("overdue task surfaces in list", tlist.counts.overdue === 1);
+call("update_task", { projectId, taskId: task.task.id, status: "done" });
+const tlist2 = call("list_tasks", { projectId });
+ok("completing a task clears open and records done", tlist2.counts.open === 0 && tlist2.counts.done === 1);
+
+// 11. Email: draft from state, track to sent, reply clears awaiting.
+const demoRfi = call("log_rfi", { projectId, subject: "Venting", question: "Confirm WH-2 flue routing." });
+const email = call("draft_email", { projectId, kind: "rfi", relatedId: demoRfi.rfi.id });
+ok("draft_email composes a subject from job state", /Venting/.test(email.email.subject));
+ok("draft_email starts as a draft", email.email.status === "draft");
+call("update_email_status", { projectId, emailId: email.email.id, status: "sent" });
+ok("sent outbound email is awaiting reply", call("list_emails", { projectId }).awaitingReplies === 1);
+call("log_inbound_email", { projectId, from: "Architect", subject: "RE: Venting", kind: "rfi", relatedId: demoRfi.rfi.id });
+ok("inbound reply clears the awaiting-reply flag", call("list_emails", { projectId }).awaitingReplies === 0);
+
+// 12. Briefing rolls it all up.
+const briefing = call("daily_briefing", { projectId });
+ok("briefing reports the current stage", typeof briefing.stage === "string" && briefing.stage.length > 0);
+ok("briefing counts the open RFI", briefing.rfis.open >= 1);
+
 console.log(`\nAll ${pass} checks passed.`);

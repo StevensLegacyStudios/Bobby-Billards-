@@ -30,5 +30,10 @@ Underground / under-slab rough-in → above-ground DWV → domestic water rough-
 - Labor cost = total estimate labor hours × blended loaded crew rate (count-weighted across the crew mix).
 - Bid waterfall: labor (+ burden) + material + tax + rentals + equipment = subtotal; + contingency = base; + overhead (on base); + profit (markup on base+overhead) = total. Always echo the inputs.
 
+## Tasks & email (running the job day-to-day)
+- **Tasks** are the PM action list (separate from the install schedule): each has an owner, due date, priority, and status. Create them with `add_task`, move them with `update_task`, review with `list_tasks`. Overdue items surface first.
+- **Email is draft-and-track, never auto-send.** `draft_email` composes a professional message (RFI, submittal, bid proposal, change order, schedule, procurement) from job state and logs it as a draft; the human sends it and marks it `sent` via `update_email_status`. "Awaiting reply" = an outbound email marked sent but not yet replied. Record incoming mail with `log_inbound_email`.
+- `daily_briefing` rolls up the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, upcoming inspections.
+
 ## FastPipe
 FastPipe/FastEST exports an Excel workbook with labor hours, material cost, fixtures, labor rates, rentals, taxes — often broken out by section / spec / zone / cost-code / tag. The parser maps headers via an editable alias map and reports any column it could not map; ask the user to confirm unmapped columns.

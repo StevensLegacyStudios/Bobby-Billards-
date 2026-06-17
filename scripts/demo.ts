@@ -48,7 +48,7 @@ const rl = createInterface({ input: stdin, output: stdout });
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let stepNo = 0;
-const TOTAL = 8;
+const TOTAL = 18;
 
 async function pause(): Promise<void> {
   if (AUTO) {
@@ -123,9 +123,32 @@ function waterfall(bid: any): void {
   for (const f of bid.assumptionFlags ?? []) line(`  ${c.yellow}⚠ ${f}${c.reset}`);
 }
 
+function emailCard(email: any): void {
+  line(`  ${c.gray}┌─ email (${email.status}) ───────────────────${c.reset}`);
+  line(`  ${c.gray}│${c.reset} ${c.dim}To:${c.reset} ${email.party}`);
+  line(`  ${c.gray}│${c.reset} ${c.dim}Subject:${c.reset} ${c.bold}${email.subject}${c.reset}`);
+  line(`  ${c.gray}│${c.reset}`);
+  for (const bl of String(email.body).split("\n").slice(0, 7))
+    line(`  ${c.gray}│${c.reset} ${bl}`);
+  line(`  ${c.gray}│${c.reset} ${c.dim}…${c.reset}`);
+  line(`  ${c.gray}└─────────────────────────────────────────${c.reset}`);
+}
+
+function tasksList(tasks: any[], today: string): void {
+  for (const t of tasks) {
+    const od = t.due && t.due < today ? ` ${c.yellow}OVERDUE${c.reset}` : "";
+    line(
+      `    ${c.magenta}[${t.priority}]${c.reset} ${t.title}` +
+        `${t.assignee ? ` ${c.dim}→ ${t.assignee}${c.reset}` : ""}` +
+        `${t.due ? ` ${c.dim}(due ${t.due})${c.reset}` : ""}${od}`,
+    );
+  }
+}
+
 // ----- the demo ----------------------------------------------------------
 
 const NAME = "Acme Tower 12th-floor TI";
+const TODAY = "2026-06-17";
 
 async function main(): Promise<void> {
   line();
@@ -141,6 +164,13 @@ async function main(): Promise<void> {
   typed("cmd", `/new "${NAME}" region=East Bay`);
   const created = call("create_project", { name: NAME, region: "East Bay" });
   const id: string = created.projectId;
+  const currentStage = (): string => call("list_next_actions", { projectId: id }).currentStage;
+  const advanceTo = (target: string): void => {
+    for (let k = 0; k < 12; k++) {
+      if (currentStage() === target) break;
+      if (!call("advance_stage", { projectId: id }).advanced) break;
+    }
+  };
   line(
     `  → Created. UA Local ${c.bold}${created.uaLocal}${c.reset} (East Bay), wage table seeded ${c.yellow}(all unverified)${c.reset}.`,
   );
@@ -227,23 +257,137 @@ async function main(): Promise<void> {
   line(
     `  ${c.green}✓ Journeyman row verified.${c.reset} Bid moved ${c.bold}${money(bid1.waterfall.total)}${c.reset} → ${c.bold}${money(bid2.waterfall.total)}${c.reset}.`,
   );
+  // The stage gate: it only advances when the stage's required data is satisfied.
+  advanceTo("submittals_rfis");
+  line(`  ${c.green}✓ Stage gate:${c.reset} data complete → advanced Lease → Estimate → Bid → Contract → Submittals & RFIs.`);
   await pause();
 
-  // 8 — Advance the stage.
-  step("Advance the stage", "It only lets you move on once the stage's required info is satisfied.");
-  typed("say", "Looks good — move us to the next stage.");
-  const adv = call("advance_stage", { projectId: id });
-  if (adv.advanced) {
-    line(`  ${c.green}✓ Advanced.${c.reset}`);
-    footer(adv.gaps, NAME);
-  } else {
-    line(`  ${c.yellow}Held back: ${adv.reason}${c.reset}`);
-  }
+  // 8 — Draft the bid proposal email.
+  step("Draft the proposal email", "draft_email composes from job state and LOGS it — it never auto-sends.");
+  typed("say", "Draft the proposal email to the GC.");
+  const bidEmail = call("draft_email", { projectId: id, kind: "bid", to: "Turner GC — J. Reyes" });
+  emailCard(bidEmail.email);
+  call("update_email_status", { projectId: id, emailId: bidEmail.email.id, status: "sent" });
+  line(`  ${c.green}✓ Marked sent${c.reset} ${c.dim}(you send by copy/paste; now tracked as awaiting reply).${c.reset}`);
+  await pause();
+
+  // 9 — Log an RFI and draft its email.
+  step("Log an RFI + email it out", "Field conflicts become tracked RFIs, then a drafted email to the architect.");
+  typed("say", "RFI: water-heater venting conflicts with HVAC at grid line C — confirm WH-2 flue routing.");
+  const rfi = call("log_rfi", {
+    projectId: id,
+    subject: "Water heater venting routing",
+    question: "WH-2 flue conflicts with HVAC duct at grid line C — confirm routing/clearance.",
+  });
+  const rfiEmail = call("draft_email", { projectId: id, kind: "rfi", to: "Architect — DLR", relatedId: rfi.rfi.id });
+  emailCard(rfiEmail.email);
+  call("update_email_status", { projectId: id, emailId: rfiEmail.email.id, status: "sent" });
+  line(`  ${c.green}✓ RFI logged & email sent.${c.reset}`);
+  await pause();
+
+  // 10 — Log a submittal.
+  step("Log a submittal", "Track fixtures/valves/backflow to approval before release.");
+  typed("say", "Submittal: 22 40 00 plumbing fixtures + RPZ backflow cut sheets.");
+  call("log_submittal", {
+    projectId: id,
+    spec: "22 40 00 Plumbing Fixtures",
+    description: "Fixture cut sheets + 2\" RPZ backflow assembly data.",
+  });
+  line(`  ${c.green}✓ Submittal pending approval.${c.reset}`);
+  await pause();
+
+  // 11 — Add tasks (the to-do list).
+  step("Build the to-do list", "Real tasks: owner, due date, priority, status — overdue surfaces first.");
+  typed("say", "Add my follow-ups.");
+  call("add_task", { projectId: id, title: "Confirm foreman & apprentice CBA base rates", priority: "high", assignee: "You", due: "2026-06-15" });
+  call("add_task", { projectId: id, title: "Order 2\" RPZ backflow (long lead)", priority: "high", assignee: "Procurement", due: "2026-06-24" });
+  call("add_task", { projectId: id, title: "Walk grid line C with HVAC foreman", priority: "normal", assignee: "Field", due: "2026-06-20" });
+  const tl = call("list_tasks", { projectId: id });
+  line(`  → ${c.bold}${tl.counts.open}${c.reset} open · ${c.yellow}${tl.counts.overdue} overdue${c.reset}`);
+  tasksList(tl.tasks, TODAY);
+  await pause();
+
+  // 12 — Generate the install schedule.
+  step("Generate the install schedule", "Rough-in → top-out → trim sequence with durations & dependencies.");
+  typed("say", "Build the schedule starting 2026-07-01.");
+  const sched = call("generate_schedule", { projectId: id, startDate: "2026-07-01" });
+  line(`  → ${c.bold}${sched.taskCount}${c.reset} tasks · finish ${c.bold}${sched.finish}${c.reset}`);
+  for (const t of sched.tasks.slice(0, 3))
+    line(`    ${c.dim}•${c.reset} ${t.name} ${c.dim}(${t.start} → ${t.finish})${c.reset}`);
+  advanceTo("install_inspections"); // schedule start set → move through to install
+  await pause();
+
+  // 13 — Record procurement.
+  step("Record procurement", "Long-lead material tracked against need-by dates.");
+  typed("say", "Procurement: 2\" RPZ backflow, Ferguson, quoted, need by 2026-07-10.");
+  call("record_procurement", { projectId: id, item: "2\" RPZ backflow assembly", vendor: "Ferguson", status: "quoted", needBy: "2026-07-10" });
+  line(`  ${c.green}✓ Logged (quoted).${c.reset}`);
+  await pause();
+
+  // 14 — Log an inspection.
+  step("Schedule an inspection", "Inspections gate the phases: rough-in before cover, then top-out, final.");
+  typed("say", "Schedule the rough-in inspection for 2026-07-08.");
+  call("log_inspection", { projectId: id, type: "rough_in", result: "scheduled", date: "2026-07-08" });
+  line(`  ${c.green}✓ Rough-in inspection scheduled.${c.reset}`);
+  await pause();
+
+  // 15 — Certified payroll preview.
+  step("Certified-payroll preview", "Public-works weekly gross at base rate + apprentice-ratio check (preview only).");
+  typed("say", "Log week-ending 2026-07-10 hours and show the certified-payroll preview.");
+  call("update_project", {
+    projectId: id,
+    patch: {
+      payroll: [
+        {
+          weekEnding: "2026-07-10",
+          entries: [
+            { worker: "R. Vasquez", classification: "foreman", hours: 40 },
+            { worker: "T. Nguyen", classification: "journeyman", hours: 40 },
+            { worker: "M. Silva", classification: "journeyman", hours: 40 },
+            { worker: "D. Park", classification: "journeyman", hours: 40 },
+            { worker: "J. Cole", classification: "apprentice_step_3", hours: 40 },
+          ],
+        },
+      ],
+    },
+  });
+  const cpr = call("certified_payroll_summary", { projectId: id, weekEnding: "2026-07-10" });
+  line(`  → ${c.bold}${cpr.totalHours}${c.reset} hrs · gross ${c.bold}${money(cpr.totalGross)}${c.reset}`);
+  line(`  ${cpr.ratioCheck.ok ? c.green + "✓ apprentice ratio OK" : c.yellow + "⚠ ratio issue"}${c.reset} ${c.dim}(${cpr.ratioCheck.detail.split(".")[0]})${c.reset}`);
+  for (const f of cpr.flags) line(`  ${c.yellow}⚠ ${f}${c.reset}`);
+  await pause();
+
+  // 16 — Log a change order.
+  step("Log a change order", "Priced COs are tracked and (phase 2) flow into contract value.");
+  typed("say", "CO: add 2 mop sinks in the level-12 break rooms, +$4,200.");
+  call("log_change_order", { projectId: id, description: "Add 2 mop sinks, level-12 break rooms", costDelta: 4200 });
+  line(`  ${c.green}✓ CO logged (pending).${c.reset}`);
+  await pause();
+
+  // 17 — Inbound reply clears the thread; close out a task.
+  step("Log a reply & close a task", "Inbound mail can auto-clear the awaiting-reply flag; tasks get marked done.");
+  typed("say", "Architect replied on the venting RFI; mark the grid-line-C walk done.");
+  call("log_inbound_email", { projectId: id, from: "Architect — DLR", subject: "RE: Water heater venting routing", kind: "rfi", relatedId: rfi.rfi.id });
+  const walk = tl.tasks.find((t: any) => /grid line C/i.test(t.title));
+  if (walk) call("update_task", { projectId: id, taskId: walk.id, status: "done" });
+  line(`  ${c.green}✓ Reply logged (RFI email no longer awaiting); 1 task completed.${c.reset}`);
+  await pause();
+
+  // 18 — Daily briefing: the whole plate at a glance.
+  step("Daily briefing", "One snapshot of the entire job — the 'what's on my plate' command.");
+  typed("cmd", "/briefing");
+  const br = call("daily_briefing", { projectId: id });
+  line(`  ${c.bold}═══ ${NAME} · ${br.stage} ═══${c.reset}`);
+  line(`  ${c.green}NEXT ACTION:${c.reset} ${br.nextAction}`);
+  line(`  ${c.bold}TASKS:${c.reset} ${br.tasks.open} open, ${c.yellow}${br.tasks.overdue} overdue${c.reset}`);
+  tasksList(br.tasks.top, TODAY);
+  line(`  ${c.bold}EMAIL:${c.reset} ${br.email.drafts} draft, ${br.email.awaitingReplies} awaiting reply`);
+  line(`  ${c.bold}OPEN:${c.reset} RFIs ${br.rfis.open} · submittals ${br.submittals.pending} · inspections ${br.inspections.upcoming}`);
 
   line();
-  line(`${c.bold}${c.green}That's the loop.${c.reset} ingest → plan → ask → compute → verify → advance.`);
-  line(`${c.dim}Run it for real with your own jobs: ${c.reset}${c.bold}npm run dev${c.reset}`);
-  line(`${c.dim}Full guide: MANUAL.md${c.reset}`);
+  line(`${c.bold}${c.green}That's the whole loop.${c.reset} estimate → bid → RFIs/submittals → email → tasks → schedule →`);
+  line(`${c.green}procurement → inspections → payroll → change orders → briefing.${c.reset}`);
+  line(`${c.dim}Run it for real with your own jobs: ${c.reset}${c.bold}npm run dev${c.reset}   ${c.dim}· Full guide: MANUAL.md${c.reset}`);
   line();
   rl.close();
 }

@@ -271,6 +271,60 @@ export const PayrollWeekSchema = z.object({
 });
 export type PayrollWeek = z.infer<typeof PayrollWeekSchema>;
 
+/**
+ * A tracked to-do on the job — distinct from the schedule's install Tasks. Has an
+ * owner, due date, priority and status so the PM can run a real action list.
+ */
+export const TaskItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  detail: z.string().nullable().default(null),
+  assignee: z.string().nullable().default(null),
+  due: z.string().nullable().default(null),
+  priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+  status: z.enum(["open", "in_progress", "blocked", "done"]).default("open"),
+  stage: z.string().nullable().default(null),
+  /** where it came from, e.g. "rfi:<id>", "email:<id>", "manual" */
+  source: z.string().nullable().default(null),
+  createdAt: z.string(),
+  completedAt: z.string().nullable().default(null),
+});
+export type TaskItem = z.infer<typeof TaskItemSchema>;
+
+/**
+ * An email tied to the job. Draft-and-track only: the tool composes the message
+ * and logs it; sending is done by the human (copy/paste). No external send.
+ */
+export const EmailSchema = z.object({
+  id: z.string(),
+  direction: z.enum(["outbound", "inbound"]).default("outbound"),
+  /** recipient (outbound) or sender (inbound) */
+  party: z.string(),
+  subject: z.string(),
+  body: z.string().default(""),
+  kind: z
+    .enum([
+      "general",
+      "rfi",
+      "submittal",
+      "bid",
+      "change_order",
+      "schedule",
+      "inspection",
+      "procurement",
+    ])
+    .default("general"),
+  /** id of the linked record (rfi/submittal/etc.), if any */
+  relatedId: z.string().nullable().default(null),
+  status: z
+    .enum(["draft", "sent", "received", "replied", "archived"])
+    .default("draft"),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  sentAt: z.string().nullable().default(null),
+});
+export type Email = z.infer<typeof EmailSchema>;
+
 export const OpenQuestionSchema = z.object({
   id: z.string(),
   stage: z.string(),
@@ -361,6 +415,8 @@ export const ProjectSchema = z.object({
   inspections: z.array(InspectionSchema).default([]),
   procurement: z.array(ProcurementSchema).default([]),
   payroll: z.array(PayrollWeekSchema).default([]),
+  tasks: z.array(TaskItemSchema).default([]),
+  emails: z.array(EmailSchema).default([]),
   openQuestions: z.array(OpenQuestionSchema).default([]),
   activityLog: z.array(ActivityLogEntrySchema).default([]),
 });

@@ -85,7 +85,7 @@ const plain = (l) => l.replace(/\x1b\[[0-9;]*m/g, "");
 const blocks = [];
 let cur = { title: "Overview", lines: [] };
 for (const l of lines) {
-  const mm = /▶ STEP (\d)\/8 — (.+)/.exec(plain(l));
+  const mm = /▶ STEP (\d+)\/\d+ — (.+)/.exec(plain(l));
   if (mm) {
     blocks.push(cur);
     cur = { title: `Step ${mm[1]} — ${mm[2].trim()}`, lines: [l] };
@@ -188,8 +188,19 @@ bullets([
   "/open <projectId>  — reopen a saved job and get its next action",
   "/ingest <path-to-xlsx>  — import a FastPipe export into the active job",
   "/status  or  /next  — show the deterministic NEXT ACTION + OPEN QUESTIONS",
+  "/briefing  — what's on my plate: next action, tasks, emails, RFIs, inspections",
+  "/tasks  — list the job's to-dos (overdue first)   ·   /email  — logged emails",
   "/projects  — list saved jobs   ·   /help  — banner   ·   /exit  — quit",
 ]);
+
+h2("Tasks, email & the daily briefing");
+para("Beyond estimating and bidding, the tool runs the job day-to-day:");
+bullets([
+  "TASKS — a real action list (owner, due date, priority, status), separate from the install schedule. Overdue items surface first. Just tell the brain what you need to do, or who owns it.",
+  "EMAIL (draft + track, never auto-sends) — it composes RFI, submittal, bid-proposal, change-order, schedule and procurement emails from the job's own data and logs them. You send by copy/paste, then it tracks 'awaiting reply'. Log incoming mail to keep correspondence in one place.",
+  "DAILY BRIEFING — one snapshot of the whole job: stage + next action, open/overdue tasks, emails awaiting reply, open RFIs/submittals, and upcoming inspections.",
+]);
+para("Also tracked: RFIs, submittals, change orders, inspections, procurement, the install schedule, and a certified-payroll preview — all shown in the step-by-step demo on the following pages.", { color: MUTED });
 
 h2("The job lifecycle (stages)");
 para("A job moves through these stages. The tool will not let you skip ahead while required info is still missing — answer the open questions and it advances.");

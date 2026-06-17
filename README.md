@@ -47,8 +47,11 @@ which tools to call.
   calls tools, persists state after every tool call, and asks you for missing info.
 - **Tools** (`src/agent/tools.ts`) are the model's entire action surface — create/read/update
   projects, ingest FastPipe Excel or manual estimates, get/override wages, compute labor &
-  bid, generate a schedule, log RFIs/submittals/COs/inspections, preview certified payroll,
-  and the `list_next_actions` / `request_human_input` / `advance_stage` "what do I need" engine.
+  bid, generate a schedule, log RFIs/submittals/COs/inspections, record procurement, preview
+  certified payroll, run a **task / to-do list** (`add_task` / `update_task` / `list_tasks`),
+  **draft & track email** (`draft_email` / `update_email_status` / `log_inbound_email` —
+  composed from job state, never auto-sent), a `daily_briefing` rollup, and the
+  `list_next_actions` / `request_human_input` / `advance_stage` "what do I need" engine.
 - **The math is deterministic code, not the model** (`src/engine/`): bid, labor, wages,
   schedule, gaps, payroll — so money is reproducible and unit-tested.
 - **The gap engine** (`src/engine/gaps.ts`) reads each workflow stage's required-info
@@ -97,9 +100,12 @@ npx tsx scripts/make_sample.ts   # regenerate samples/sample_fastpipe.xlsx
 ## Roadmap
 
 - **v1 (this):** the AI PM brain — ingest → plan → next action → ask for missing info →
-  compute bid & labor; FastPipe import + manual entry; wage override; persistence.
+  compute bid & labor; FastPipe import + manual entry; wage override; RFIs, submittals,
+  change orders, inspections, procurement, install schedule, certified-payroll preview;
+  a **task / to-do list**, **draft-and-track email** (composed from job state, no external
+  send), a **daily briefing**, and persistence.
 - **Phase 2:** full schedule dependency/manpower engine; registers wired into contract value;
   **DIR prevailing-wage auto-pull**; certified payroll → DIR/eMars **XML export** + apprentice-ratio
-  enforcement.
+  enforcement; **live email send** (Gmail/SMTP) on top of the existing draft/track flow.
 - **Phase 3:** optional web chat UI (same agent core) or Anthropic Managed Agents; Procore /
   MS Project / QuickBooks integrations; multi-project portfolio + proactive notifications.
