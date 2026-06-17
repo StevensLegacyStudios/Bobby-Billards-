@@ -1,0 +1,18 @@
+{
+  "version": "2026-seed-1",
+  "note": "Maps FastPipe / FastEST Excel export headers to LineItem fields. Header matching is case-insensitive and whitespace-trimmed. Add aliases as real exports come in.",
+  "aliases": {
+    "section": ["section", "area", "spec area", "system"],
+    "spec": ["spec", "specification", "spec section"],
+    "zone": ["zone", "floor", "level", "phase area"],
+    "costCode": ["cost code", "costcode", "cost-code", "code"],
+    "tag": ["tag", "item tag", "label"],
+    "description": ["description", "desc", "item", "item description"],
+    "laborHours": ["labor hours", "labor hrs", "lab hours", "lab hrs", "hours", "man hours", "manhours", "mhrs"],
+    "laborRate": ["labor rate", "lab rate", "rate", "labor $/hr"],
+    "materialCost": ["material cost", "material", "mat cost", "mat $", "material $", "matl"],
+    "fixtures": ["fixtures", "fixture count", "fixture qty", "qty"],
+    "rentals": ["rentals", "rental", "equipment rental", "rental $"],
+    "tax": ["tax", "sales tax", "tax $"]
+  }
+}

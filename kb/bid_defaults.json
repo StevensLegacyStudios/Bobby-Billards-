@@ -1,0 +1,8 @@
+{
+  "version": "2026-seed-1",
+  "note": "Editable default percentages. NOT authoritative — confirm with the user per job. Used only when the user has not supplied a value.",
+  "laborBurdenPct": 0,
+  "overheadPct": 10,
+  "profitPct": 10,
+  "contingencyPct": 0
+}
