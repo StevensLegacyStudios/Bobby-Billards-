@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { classifyEmail, type EmailInput } from "./extraction.js";
+import { loadMemory, recordCorrection, recordJobAlias, saveMemory } from "./memory.js";
 
 /**
  * The Hybrid bridge: a tiny HTTP service that Power Automate's "HTTP" action calls
@@ -50,6 +51,36 @@ export const server = createServer(async (req, res) => {
       }
       const extraction = await classifyEmail(email);
       return send(res, 200, extraction);
+    }
+    if (req.method === "POST" && req.url === "/feedback") {
+      if (TOKEN && req.headers["x-umi-token"] !== TOKEN) {
+        return send(res, 401, { error: "unauthorized" });
+      }
+      // The "always learning" hook: Power Automate posts here when you correct a
+      // classification or teach a job alias, and the next extraction uses it.
+      const fb = JSON.parse(await readBody(req)) as {
+        subjectHint?: string;
+        fromEmail?: string;
+        wrong?: string;
+        right?: string;
+        job?: string;
+        jobNumber?: string;
+        aliases?: string[];
+      };
+      let mem = loadMemory();
+      if (fb.wrong && fb.right) {
+        mem = recordCorrection(mem, {
+          subjectHint: fb.subjectHint ?? "",
+          fromEmail: fb.fromEmail ?? null,
+          wrong: fb.wrong,
+          right: fb.right,
+        });
+      }
+      if (fb.job && fb.aliases?.length) {
+        mem = recordJobAlias(mem, fb.job, fb.aliases, fb.jobNumber ?? null);
+      }
+      saveMemory(mem);
+      return send(res, 200, { ok: true, learned: { jobs: mem.jobAliases.length, corrections: mem.corrections.length } });
     }
     return send(res, 404, { error: "not found" });
   } catch (err) {

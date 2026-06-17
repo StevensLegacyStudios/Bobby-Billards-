@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { umiContacts } from "../kb.js";
+import { learnedContext, loadMemory } from "./memory.js";
 
 /**
  * The "smart part" of the Hybrid Microsoft 365 build: Power Automate captures each
@@ -83,12 +84,13 @@ export interface EmailInput {
 }
 
 /** The exact prompt sent to Claude. Faithful to the Bible, extended for closeout/CO. */
-export function buildExtractionPrompt(email: EmailInput): string {
+export function buildExtractionPrompt(email: EmailInput, learned = ""): string {
   const vendors = umiContacts.vendor.map((v) => v.company).join(", ");
   const gcs = [...new Set(umiContacts.gc.map((g) => g.company))].join(", ");
+  const learnedBlock = learned.trim() ? `\n\nLEARNED CONTEXT (from this PM's confirmations — trust it):\n${learned.trim()}\n` : "";
   return `You are an email parser for United Mechanical (UMI), a commercial HVAC and plumbing contractor in the San Francisco Bay Area.
 
-Known GCs: ${gcs}. Known vendors: ${vendors}. The same job is referenced many ways (e.g. "Perplexity", "PPLX", "181 Fremont", "10th & 11th Floors" are one job; match on name OR address OR job number).
+Known GCs: ${gcs}. Known vendors: ${vendors}. The same job is referenced many ways (e.g. "Perplexity", "PPLX", "181 Fremont", "10th & 11th Floors" are one job; match on name OR address OR job number).${learnedBlock}
 
 Analyze the following email carefully (parse the WHOLE chain, not just the latest reply):
 SUBJECT: ${email.subject}
@@ -128,10 +130,11 @@ export async function classifyEmail(
 ): Promise<Extraction> {
   const client = opts.client ?? new Anthropic();
   const model = opts.model ?? process.env.UMI_EXTRACT_MODEL ?? "claude-opus-4-8";
+  const learned = learnedContext(loadMemory());
   const res = await client.messages.create({
     model,
     max_tokens: 1500,
-    messages: [{ role: "user", content: buildExtractionPrompt(email) }],
+    messages: [{ role: "user", content: buildExtractionPrompt(email, learned) }],
   });
   const text = res.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")

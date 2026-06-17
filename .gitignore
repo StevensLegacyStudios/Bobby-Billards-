@@ -14,3 +14,6 @@ data/projects/*
 # misc
 *.log
 .DS_Store
+
+# learning memory (Microsoft 365 service)
+.umi/

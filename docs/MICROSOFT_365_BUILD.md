@@ -17,9 +17,15 @@ closeout-docs workflow.
  Jobs · Email Intake · Bids · POs · Submittals · COs · Quotes · Closeout Docs   auto-emails, follow-ups
 ```
 
-**Why Hybrid:** AI Builder's parsing is weaker on long forwarded chains (your emails are
-8+ replies deep). Routing the body to Claude gives much better category/field accuracy,
-while everything else stays low-code and lives in your tenant.
+**Why this shape:** AI Builder's parsing is weaker on long forwarded chains (your emails
+are 8+ replies deep), and it can't *learn*. Routing the body to the Claude brain gives much
+better accuracy **and** a feedback loop that improves with every correction you make — while
+the low-code orchestration still lives in your tenant. The brain owns the smart parts
+(classify, extract, draft, learn); Power Automate owns the plumbing (triggers, SharePoint,
+calendar, sending mail).
+
+See **[AUTOMATION_AND_LEARNING.md](AUTOMATION_AND_LEARNING.md)** for what runs automatically
+vs. what waits for your confirm, the confidence tiers, and how the learning loop works.
 
 ---
 
