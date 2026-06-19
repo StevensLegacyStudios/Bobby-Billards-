@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { classifyEmail, type EmailInput } from "./extraction.js";
+import { evaluateFollowUp, type OpenItem } from "./followup.js";
 import { loadMemory, recordCorrection, recordJobAlias, saveMemory } from "./memory.js";
 
 /**
@@ -81,6 +82,17 @@ export const server = createServer(async (req, res) => {
       }
       saveMemory(mem);
       return send(res, 200, { ok: true, learned: { jobs: mem.jobAliases.length, corrections: mem.corrections.length } });
+    }
+    if (req.method === "POST" && req.url === "/followup") {
+      if (TOKEN && req.headers["x-umi-token"] !== TOKEN) {
+        return send(res, 401, { error: "unauthorized" });
+      }
+      // Auto-chaser: Power Automate posts the list of open items on a daily timer and
+      // gets back send/wait/escalate decisions (with ready-to-send drafts).
+      const body = JSON.parse(await readBody(req)) as { items?: OpenItem[] };
+      const items = Array.isArray(body.items) ? body.items : [];
+      const decisions = items.map((item) => ({ item, ...evaluateFollowUp(item) }));
+      return send(res, 200, { decisions });
     }
     return send(res, 404, { error: "not found" });
   } catch (err) {
