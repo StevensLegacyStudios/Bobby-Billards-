@@ -55,7 +55,7 @@ prints the exact move manifest (`from → to`) for you to drag by hand.
 
 ```powershell
 Install-Module PnP.PowerShell -Scope CurrentUser
-./scripts/provision-sharepoint.ps1 -SiteUrl "https://umi1.sharepoint.com/sites/PlumbingPM"
+./scripts/provision-sharepoint.ps1 -SiteUrl "https://unitedmechanicalinc.sharepoint.com/sites/QualityControlManagementTeam"
 ```
 
 Creates all 8 lists with columns and choice values (the 7 from the Bible + **Closeout

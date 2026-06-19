@@ -12,7 +12,7 @@
   Connect-PnPOnline -Url "https://<tenant>.sharepoint.com/sites/<YourSite>" -Interactive
 
 .EXAMPLE
-  ./provision-sharepoint.ps1 -SiteUrl "https://umi1.sharepoint.com/sites/PlumbingPM"
+  ./provision-sharepoint.ps1 -SiteUrl "https://unitedmechanicalinc.sharepoint.com/sites/QualityControlManagementTeam"
 #>
 
 param(

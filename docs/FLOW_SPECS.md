@@ -2,9 +2,8 @@
 
 Concrete, build-it-now specs for the first two flows. They assume:
 
-- **Team site:** `https://unitedmechanicalinc.sharepoint.com/sites/UMI-PM`
-  *(the URL you gave, `unitedmechanicalinc-my.sharepoint.com`, is your OneDrive — create
-  a team site named **UMI-PM**, or tell me the real site name and I'll update these.)*
+- **Team site:** `https://unitedmechanicalinc.sharepoint.com/sites/QualityControlManagementTeam`
+  *(your existing team site — confirmed in use. Lists and flows below live here.)*
 - **Extraction service** deployed and reachable over HTTPS at `https://<your-host>` with
   `ANTHROPIC_API_KEY` and `UMI_EXTRACT_TOKEN` set as secrets (see `docs/DEPLOY.md`).
 

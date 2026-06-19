@@ -70,7 +70,7 @@ Per-job SharePoint closeout folders (run when a job is awarded):
 
 ```powershell
 ./scripts/provision-closeout-folders.ps1 `
-  -SiteUrl "https://umi1.sharepoint.com/sites/PlumbingPM" `
+  -SiteUrl "https://unitedmechanicalinc.sharepoint.com/sites/QualityControlManagementTeam" `
   -JobName "Perplexity 181 Fremont" -JobNumber "11836-15"
 ```
 

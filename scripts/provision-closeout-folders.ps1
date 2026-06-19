@@ -8,7 +8,7 @@
 
 .EXAMPLE
   ./provision-closeout-folders.ps1 `
-    -SiteUrl "https://umi1.sharepoint.com/sites/PlumbingPM" `
+    -SiteUrl "https://unitedmechanicalinc.sharepoint.com/sites/QualityControlManagementTeam" `
     -JobName "Perplexity 181 Fremont" -JobNumber "11836-15"
 #>
 
