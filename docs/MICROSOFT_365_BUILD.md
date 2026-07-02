@@ -1,5 +1,11 @@
 # UMI Job Tracking & Automation — Microsoft 365 Build (Hybrid)
 
+> **⚠️ SUPERSEDED.** This was the v1 plan, built around a hosted extraction service. The
+> current design drops the hosted service entirely — Power Automate calls the Anthropic API
+> directly. Use **[MASTER_PLAN.md](MASTER_PLAN.md)** (the what/why), **[SETUP.md](SETUP.md)**
+> (the runbook), and **[FLOW_SPECS.md](FLOW_SPECS.md)** (the flow specs). This file stays as
+> background: the Bible mapping, folder rationale, and rollout thinking are still accurate.
+
 This is the build plan for putting the agent into your Microsoft world, the **Hybrid**
 way: **Power Automate + SharePoint + Outlook** do the low-code capture, routing, and
 auto-emails; the **Claude "brain"** (this repo) does the smart parts — reading each email

@@ -45,11 +45,12 @@ extraction — so it stops repeating mistakes and learns *your* jobs and vendors
 - **Contacts** — new vendor/GC contacts seen in real mail are remembered and used to
   auto-address outgoing email.
 
-Mechanically: Power Automate POSTs your correction to the service's `/feedback` endpoint;
-it's stored in the learning memory (`src/microsoft/memory.ts`) and rendered into the
-extraction prompt by `learnedContext()`. No retraining, no ML pipeline — the brain simply
-carries your accumulated corrections forward. Persist it by mounting a volume at
-`UMI_MEMORY_PATH` so learning survives restarts.
+Mechanically: your correction (from a Teams card) is written as a row in the **AgentMemory**
+SharePoint list — aliases as "Job Alias" rows, fixes as "Correction" rows, standing
+preferences as "House Rule" rows. Flow 1 reads every Active row and injects them into the
+prompt on each call, so the very next email benefits. No retraining, no ML pipeline, no
+server to keep alive — the memory lives in SharePoint where you can see and edit it. (Flow 5
+in `FLOW_SPECS.md` does the writing; retire a stale lesson by flipping its Active flag off.)
 
 ## What this looks like day-to-day
 

@@ -98,14 +98,23 @@ npm run serve:ms    # Microsoft 365 (Hybrid) email-extraction service — Power 
 npx tsx scripts/make_sample.ts   # regenerate samples/sample_fastpipe.xlsx
 ```
 
-## Microsoft 365 (Hybrid)
+## Microsoft 365 — the UMI autonomous PM agent
 
-For United Mechanical's day-to-day "buried in email" problem, the agent ports into
-Microsoft 365 the Hybrid way: Power Automate + SharePoint + Outlook handle low-code
-capture/routing/auto-emails, and the Claude brain (`src/microsoft/`) reads each email and
-extracts structured fields. Provision the 8 SharePoint lists with
-`scripts/provision-sharepoint.ps1`, deploy the `npm run serve:ms` extraction service, and
-wire Power Automate Flow 1 to it. Full runbook: **[docs/MICROSOFT_365_BUILD.md](docs/MICROSOFT_365_BUILD.md)**.
+For United Mechanical's day-to-day "buried in email" problem, the agent runs entirely on
+Power Automate + SharePoint + Outlook, with the Power Automate **HTTP action calling the
+Anthropic API directly** — no Azure, no Docker, no hosted service to maintain. Six flows
+cover email triage, bid capture + proposal drafts, vendor chasing, submittal/closeout
+filing, corrections-based learning, and a daily briefing.
+
+Start here, in order:
+
+1. **[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md)** — what it does, what it can't, what it costs
+2. **[docs/SETUP.md](docs/SETUP.md)** — the ordered build runbook
+3. **[docs/FLOW_SPECS.md](docs/FLOW_SPECS.md)** — action-by-action flow specs
+4. **[docs/PROMPTS.md](docs/PROMPTS.md)** — copy-paste prompts + JSON schemas
+
+The Node extraction service (`src/microsoft/`, `npm run serve:ms`) still works and remains
+an optional self-hosted path (see `docs/DEPLOY.md`), but it is no longer required.
 
 ## Roadmap
 

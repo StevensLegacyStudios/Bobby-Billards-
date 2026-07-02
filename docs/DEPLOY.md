@@ -1,4 +1,10 @@
-# Deploying the extraction service to Azure
+# OPTIONAL — Deploying the self-hosted extraction service to Azure
+
+> **⚠️ You do not need this file for the standard build.** The current design calls the
+> Anthropic API **directly from Power Automate's HTTP action** — no Azure, no Docker, no
+> hosted service. Follow **[SETUP.md](SETUP.md)** instead. Keep this page only if you later
+> want a self-hosted middle layer (e.g., to add custom pre-processing or share one endpoint
+> across many flows).
 
 The service (`src/microsoft/server.ts`) needs to run somewhere Power Automate can reach
 over HTTPS. Azure Container Apps is the simplest fit. **Your Claude API key goes in as a
