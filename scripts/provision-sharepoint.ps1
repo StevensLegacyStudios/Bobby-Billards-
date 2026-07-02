@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
   Provisions the United Mechanical "Job Tracking & Automation" SharePoint Lists
-  (UMI System Bible v2.0, Section 3) plus the Closeout Docs list.
+  (UMI System Bible v2.0, Section 3) plus the Closeout Docs, OpenItems, and
+  AgentMemory lists.
 
 .DESCRIPTION
-  Creates 8 lists with their key columns and choice values. Run once against your
+  Creates 10 lists with their key columns and choice values. Run once against your
   SharePoint site. Idempotent-ish: skips lists that already exist.
 
 .PREREQUISITES
@@ -175,5 +176,36 @@ Add-Text   "Closeout Docs" "StagingPath"
 Add-Text   "Closeout Docs" "JobPath"
 Add-Note   "Closeout Docs" "Notes"
 
-Write-Host "`nDone. 8 lists provisioned on $SiteUrl." -ForegroundColor Cyan
-Write-Host "Next: build Power Automate Flow 1 (see docs/MICROSOFT_365_BUILD.md)." -ForegroundColor Cyan
+# ---- LIST 9: OpenItems (NEW) ----------------------------------------------
+# The to-do / follow-up tracker. Built-in Title column = the ask,
+# e.g. "Quote for floor drains".
+New-List "OpenItems"
+Add-Choice "OpenItems" "Kind" @("Quote Request","PO Confirmation","Submittal","Closeout Docs","Task")
+Add-Text   "OpenItems" "Job"
+Add-Text   "OpenItems" "JobNumber"
+Add-Text   "OpenItems" "Vendor"
+Add-Text   "OpenItems" "ContactName"
+Add-Text   "OpenItems" "ContactEmail"
+Add-Text   "OpenItems" "ThreadSubject"
+Add-Date   "OpenItems" "SentAt"
+Add-Date   "OpenItems" "LastNudgeAt"
+Add-Date   "OpenItems" "DueDate"
+Add-Num    "OpenItems" "NudgeCount"
+Add-Choice "OpenItems" "Urgency" @("High","Normal","Low")
+Add-Choice "OpenItems" "Status" @("Open","Nudged","Escalated","Closed")
+Add-Note   "OpenItems" "Notes"
+
+# ---- LIST 10: AgentMemory (NEW) --------------------------------------------
+# The learning store. Built-in Title column = a short label. Flow 1 reads all
+# Active items on every run and injects them into the triage prompt.
+New-List "AgentMemory"
+Add-Choice "AgentMemory" "EntryType" @("Job Alias","Correction","Contact","House Rule")
+Add-Text   "AgentMemory" "Job"
+Add-Text   "AgentMemory" "JobNumber"
+Add-Note   "AgentMemory" "Content"   # the lesson, e.g. "Perplexity" = "181 Fremont" = "PPLX"
+Add-Bool   "AgentMemory" "Active"    # default Yes; flip off to retire a lesson
+Set-PnPField -List "AgentMemory" -Identity "Active" -Values @{ DefaultValue = "1" } -ErrorAction SilentlyContinue | Out-Null
+Add-Text   "AgentMemory" "Source"    # e.g. "Teams card correction 2026-07-02"
+
+Write-Host "`nDone. 10 lists provisioned on $SiteUrl." -ForegroundColor Cyan
+Write-Host "Next: build Power Automate Flow 1 and Flow 5 (see docs/SETUP.md step 5 and docs/FLOW_SPECS.md)." -ForegroundColor Cyan
