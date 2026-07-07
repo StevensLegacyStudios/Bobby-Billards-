@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "note": "United Mechanical, Inc. directory — sourced from the UMI Job Tracking & Automation System Bible v2.0 and live job correspondence. Used to auto-address emails (PO requests, foreman alerts, closeout requests) and to seed the Microsoft 365 build.",
+  "company": {
+    "name": "United Mechanical, Inc.",
+    "address": "2185 Oakland Road, San Jose, CA 95131",
+    "branchAddress": "2120 Berkeley Way, Berkeley, CA",
+    "phone": "408.232.9000",
+    "poDepartmentEmail": "purchasing@umi1.com",
+    "bidsEmail": "bids@umi1.com",
+    "jobNumberFormat": "XXXXX-XX"
+  },
+  "defaultPM": {
+    "name": "Shawn Stevens",
+    "role": "Project Manager",
+    "email": "sstevens@umi1.com",
+    "phone": "510-920-4024"
+  },
+  "internal": [
+    { "name": "Scott Molkenbuhr", "role": "Executive / Decision Maker", "email": "smolkenbuhr@umi1.com", "phone": "650-892-5118" },
+    { "name": "Carlos Corona", "role": "Project Executive", "email": "ccorona@umi1.com", "phone": "408-438-1695" },
+    { "name": "Jose Menjivar", "role": "VP HVAC Division", "email": "jmenjivar@umi1.com", "phone": "408-607-8273" },
+    { "name": "Jeff Knobel", "role": "HVAC Estimator", "email": "jknobel@umi1.com", "phone": null },
+    { "name": "Rod Blackmon", "role": "Project Executive", "email": "rblackmon@umi1.com", "phone": "341-252-2900" },
+    { "name": "Shawn Stevens", "role": "Project Manager", "email": "sstevens@umi1.com", "phone": "510-920-4024" },
+    { "name": "Omar Hashem", "role": "Asst. Project Manager", "email": "ohashem@umi1.com", "phone": "408-202-7046" },
+    { "name": "Brian Price", "role": "Superintendent (Local 38)", "email": "bprice@umi1.com", "phone": "408-313-2861" },
+    { "name": "Brandon Whitaker", "role": "Field", "email": "bwhitaker@umi1.com", "phone": null },
+    { "name": "Lisa Silveira", "role": "Purchasing", "email": "lsilveira@umi1.com", "phone": "408-709-9963" },
+    { "name": "Bianca Herrera", "role": "Office Admin (Bids)", "email": "bherrera@umi1.com", "phone": null },
+    { "name": "Natalie Ryan", "role": "Engineering — Plumbing As-builts", "email": null, "phone": null },
+    { "name": "Nicolas Holman", "role": "Engineering — HVAC As-builts", "email": null, "phone": null }
+  ],
+  "gc": [
+    { "name": "Gentry Wright", "company": "SC Builders", "email": "gwright@scbuildersinc.com", "phone": "415-233-0238" },
+    { "name": "Wai Wai Khine", "company": "SC Builders", "email": "wkhine@scbuildersinc.com", "phone": "650-455-2922" },
+    { "name": "Jack Foley", "company": "SC Builders", "email": "jfoley@scbuildersinc.com", "phone": "612-961-2420" },
+    { "name": "Cortney Kiner", "company": "SC Builders", "email": "ckiner@scbuildersinc.com", "phone": "209-484-2517" },
+    { "name": "Adam Dieck", "company": "GCI", "email": "adieck@gcigc.com", "phone": "415-961-2207" }
+  ],
+  "vendor": [
+    { "name": "Matthew Cogswell", "company": "Cal Steam — Hayward", "email": "mcogswell@calsteam.com", "phone": "510-404-1735" },
+    { "name": "Marius Silas", "company": "Pace Supply — San Francisco", "email": "msilas@pacesupply.com", "phone": "415-644-4900" },
+    { "name": "Casey Darcy", "company": "Cal Core", "email": "admin@cal-core.com", "phone": null },
+    { "name": "Jim Darcy", "company": "Cal Core", "email": "jim@cal-core.com", "phone": null }
+  ]
+}

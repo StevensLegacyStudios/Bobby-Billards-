@@ -1,0 +1,17 @@
+{
+  "version": "2026-seed-1",
+  "note": "Typical durations are planning placeholders (calendar days for one crew on a moderate TI floor). Override per job.",
+  "items": [
+    { "system": "Underground / under-slab rough-in", "phase": "underground_rough_in", "typicalDurationDays": 6, "dependsOnPhases": [] },
+    { "system": "Above-ground DWV rough-in", "phase": "above_ground_dwv", "typicalDurationDays": 8, "dependsOnPhases": ["underground_rough_in"] },
+    { "system": "Domestic water rough-in", "phase": "water_rough_in", "typicalDurationDays": 7, "dependsOnPhases": ["above_ground_dwv"] },
+    { "system": "Storm & sanitary", "phase": "storm_sanitary", "typicalDurationDays": 5, "dependsOnPhases": ["underground_rough_in"] },
+    { "system": "Natural gas piping", "phase": "gas", "typicalDurationDays": 4, "dependsOnPhases": ["above_ground_dwv"] },
+    { "system": "Medical gas", "phase": "medical_gas", "typicalDurationDays": 6, "dependsOnPhases": ["water_rough_in"] },
+    { "system": "Top-out", "phase": "top_out", "typicalDurationDays": 6, "dependsOnPhases": ["water_rough_in", "above_ground_dwv"] },
+    { "system": "Water heaters", "phase": "water_heaters", "typicalDurationDays": 2, "dependsOnPhases": ["top_out"] },
+    { "system": "Backflow assemblies", "phase": "backflow", "typicalDurationDays": 2, "dependsOnPhases": ["water_rough_in"] },
+    { "system": "Trim / finish (set fixtures, valves, trim-out)", "phase": "trim_finish", "typicalDurationDays": 8, "dependsOnPhases": ["top_out"] },
+    { "system": "Fixtures set & connect", "phase": "fixtures", "typicalDurationDays": 4, "dependsOnPhases": ["trim_finish"] }
+  ]
+}

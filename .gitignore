@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# secrets
+.env
+
+# runtime project state (keep the dir, ignore contents)
+data/projects/*
+!data/projects/.gitkeep
+
+# misc
+*.log
+.DS_Store
+
+# learning memory (Microsoft 365 service)
+.umi/

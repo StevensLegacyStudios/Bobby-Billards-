@@ -1,0 +1,86 @@
+{
+  "version": "2026-seed-1",
+  "stages": [
+    {
+      "id": "lease_scope_review",
+      "label": "Lease / Scope Review",
+      "summary": "Confirm the job basics: client/GC, region (drives the UA local), jurisdiction, whether this is public works, and a scope summary.",
+      "requiredInfo": [
+        { "path": "location.region", "question": "Which region is the job in (SF, East Bay, North Bay, Sacramento, San Jose)? This sets the UA local and wage scale.", "blocking": true },
+        { "path": "publicWorks", "question": "Is this a public works job (> $1,000 of public funds)? If so, prevailing wage + weekly certified payroll + apprentice ratios apply.", "blocking": true },
+        { "path": "scopeSummary", "question": "Give me a one-line scope summary (what plumbing work is in this TI).", "blocking": false }
+      ]
+    },
+    {
+      "id": "estimate_takeoff",
+      "label": "Estimate & Takeoff (FastPipe)",
+      "summary": "Bring in the estimate — import a FastPipe Excel export or enter line items manually. Roll up labor hours, material, fixtures, rentals, tax.",
+      "requiredInfo": [
+        { "path": "estimate.rollups.laborHours", "question": "I need the estimate. Import your FastPipe Excel export (use /ingest <file>) or give me the line items to enter manually.", "blocking": true },
+        { "path": "estimate.rollups.materialCost", "question": "What is the total material cost (from the FastPipe export or manual entry)?", "blocking": true }
+      ]
+    },
+    {
+      "id": "bid_proposal",
+      "label": "Bid / Proposal",
+      "summary": "Compute the bid: loaded labor cost + material + tax + rentals + equipment, then apply burden / overhead / profit / contingency.",
+      "requiredInfo": [
+        { "path": "labor.computed.totalLaborCost", "question": "I need to compute labor cost first — confirm the crew mix and wage rows so I can run compute_labor_cost.", "blocking": true },
+        { "path": "bid.inputs.overheadPct", "question": "What overhead % should I use on this bid?", "blocking": true },
+        { "path": "bid.inputs.profitPct", "question": "What profit (markup) % should I use on this bid?", "blocking": true }
+      ]
+    },
+    {
+      "id": "contract_buyout",
+      "label": "Contract / Buyout",
+      "summary": "Award booked, contract value set, vendors and major material bought out.",
+      "requiredInfo": [
+        { "path": "bid.waterfall.total", "question": "We need a computed bid total before buyout. Run the bid first.", "blocking": true }
+      ]
+    },
+    {
+      "id": "submittals_rfis",
+      "label": "Submittals & RFIs",
+      "summary": "Track submittals (fixtures, valves, backflow, water heaters) and RFIs through approval.",
+      "requiredInfo": []
+    },
+    {
+      "id": "schedule_manpower",
+      "label": "Schedule & Manpower",
+      "summary": "Build the install schedule (rough-in → inspection → top-out → inspection → trim/final) and load manpower against crew size.",
+      "requiredInfo": [
+        { "path": "schedule.startDate", "question": "What is the planned start date so I can build the schedule?", "blocking": true }
+      ]
+    },
+    {
+      "id": "procurement",
+      "label": "Procurement",
+      "summary": "Order long-lead and staged materials against the schedule need-by dates.",
+      "requiredInfo": []
+    },
+    {
+      "id": "install_inspections",
+      "label": "Install & Inspections",
+      "summary": "Execute the install, log rough-in / top-out / final inspections and their results.",
+      "requiredInfo": []
+    },
+    {
+      "id": "certified_payroll",
+      "label": "Certified Payroll",
+      "summary": "On public works, produce weekly certified payroll (CPRs) and check apprentice-to-journeyman ratios.",
+      "requiredInfo": []
+    },
+    {
+      "id": "change_orders",
+      "label": "Change Orders",
+      "summary": "Price and track change orders; feed approved COs back into contract value.",
+      "requiredInfo": []
+    },
+    {
+      "id": "closeout",
+      "label": "Closeout",
+      "summary": "As-builts, warranty, final inspection sign-off, retention release.",
+      "requiredInfo": []
+    }
+  ]
+}

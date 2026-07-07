@@ -1,0 +1,61 @@
+{
+  "version": "2026-seed-1",
+  "disclaimer": "PLACEHOLDER / LAST-KNOWN RATES. Every rate here is unverified and flagged verify=true. Confirm against the current CA DIR determination (https://www.dir.ca.gov/oprl) and the applicable UA-local CBA before any bid, payroll, or contract use.",
+  "regionToLocal": {
+    "SF": "38",
+    "East Bay": "342",
+    "North Bay": "38",
+    "Sacramento": "447",
+    "San Jose": "393"
+  },
+  "locals": {
+    "38": {
+      "name": "UA Local 38 (San Francisco / North Bay)",
+      "regions": ["SF", "North Bay"],
+      "source": "PLACEHOLDER — confirm Local 38 CBA / DIR 2026-1",
+      "effectiveDate": null,
+      "classifications": {
+        "journeyman": { "baseHourly": 82.0, "fringes": { "hw": 16.0, "pension": 18.0, "vacation": 6.0, "training": 1.5, "other": 1.0 } },
+        "foreman": { "pctOfJourneyman": 1.1 },
+        "general_foreman": { "pctOfJourneyman": 1.2 },
+        "apprenticePctOfJourneyman": [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+      }
+    },
+    "342": {
+      "name": "UA Local 342 (Plumbers & Steamfitters — Concord / East Bay)",
+      "regions": ["East Bay"],
+      "source": "PLACEHOLDER — confirm Local 342 CBA / DIR 2026-1",
+      "effectiveDate": null,
+      "classifications": {
+        "journeyman": { "baseHourly": 80.0, "fringes": { "hw": 15.5, "pension": 17.5, "vacation": 5.5, "training": 1.5, "other": 1.0 } },
+        "foreman": { "pctOfJourneyman": 1.1 },
+        "general_foreman": { "pctOfJourneyman": 1.2 },
+        "apprenticePctOfJourneyman": [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+      }
+    },
+    "393": {
+      "name": "UA Local 393 (Plumbers & Pipefitters — San Jose / Santa Clara County)",
+      "regions": ["San Jose"],
+      "source": "PLACEHOLDER — confirm Local 393 CBA / DIR 2026-1",
+      "effectiveDate": null,
+      "classifications": {
+        "journeyman": { "baseHourly": 81.0, "fringes": { "hw": 16.0, "pension": 18.0, "vacation": 6.0, "training": 1.5, "other": 1.0 } },
+        "foreman": { "pctOfJourneyman": 1.1 },
+        "general_foreman": { "pctOfJourneyman": 1.2 },
+        "apprenticePctOfJourneyman": [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+      }
+    },
+    "447": {
+      "name": "UA Local 447 (Plumbers & Pipefitters — Sacramento)",
+      "regions": ["Sacramento"],
+      "source": "PLACEHOLDER — confirm Local 447 CBA / DIR 2026-1",
+      "effectiveDate": null,
+      "classifications": {
+        "journeyman": { "baseHourly": 76.0, "fringes": { "hw": 15.0, "pension": 16.5, "vacation": 5.0, "training": 1.5, "other": 1.0 } },
+        "foreman": { "pctOfJourneyman": 1.1 },
+        "general_foreman": { "pctOfJourneyman": 1.2 },
+        "apprenticePctOfJourneyman": [0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+      }
+    }
+  }
+}
