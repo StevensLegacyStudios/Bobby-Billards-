@@ -32,10 +32,12 @@ create table if not exists public.venues (
 create index if not exists venues_coordinates_gist on public.venues using gist (coordinates);
 
 -- Dedup guards for automated API syncs:
--- 1) a Places-sourced row is unique by its Google place id;
+-- 1) a source-synced row is unique by its external place id (a full unique
+--    constraint, not a partial index, so ON CONFLICT can target it);
 create unique index if not exists venues_google_place_id_key
   on public.venues (google_place_id)
   where google_place_id is not null;
+-- NOTE: superseded by 0004_fix_google_place_id_unique.sql on live projects.
 -- 2) manually-entered rows are unique by normalized name at a ~1m snapped location.
 create unique index if not exists venues_name_location_key
   on public.venues (lower(name), st_snaptogrid(coordinates::geometry, 0.00001));
