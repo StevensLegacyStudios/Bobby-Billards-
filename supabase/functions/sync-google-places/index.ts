@@ -73,7 +73,7 @@ async function searchPlacesInBox(
     },
     body: JSON.stringify({
       textQuery: "billiards OR pool hall",
-      locationRestriction: { rectangle: box },
+      locationRestriction: { rectangle: { low: box.low, high: box.high } },
       maxResultCount: 20,
     }),
   });
