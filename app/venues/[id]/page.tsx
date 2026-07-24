@@ -26,14 +26,13 @@ async function fetchVenue(id: string): Promise<Venue | null> {
       .select("*")
       .eq("id", id)
       .maybeSingle();
-    if (data) {
-      const coords = data.coordinates;
-      return {
-        ...data,
-        lat: typeof coords === "object" ? coords?.coordinates?.[1] ?? 0 : 0,
-        lng: typeof coords === "object" ? coords?.coordinates?.[0] ?? 0 : 0,
-      } as Venue;
-    }
+    if (!data) return null; // With a live database, missing means missing.
+    const coords = data.coordinates;
+    return {
+      ...data,
+      lat: typeof coords === "object" ? coords?.coordinates?.[1] ?? 0 : 0,
+      lng: typeof coords === "object" ? coords?.coordinates?.[0] ?? 0 : 0,
+    } as Venue;
   }
   return findDemoVenue(id) ?? null;
 }

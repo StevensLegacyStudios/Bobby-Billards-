@@ -5,6 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEMO_VENUES } from "@/lib/demo-data";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import type { Venue } from "@/lib/types";
+
+// Refresh the featured-venue list every 5 minutes.
+export const revalidate = 300;
 
 const FEATURES = [
   {
@@ -23,7 +28,7 @@ const FEATURES = [
     icon: ShieldCheck,
     title: "Crowd-verified conditions",
     body: "Cloth quality, pocket cuts, cue clearance — validated by the players who actually shot there.",
-    href: `/venues/${DEMO_VENUES[0].id}`,
+    href: "/trip-planner",
   },
   {
     icon: WifiOff,
@@ -33,8 +38,23 @@ const FEATURES = [
   },
 ];
 
-export default function HomePage() {
-  const featured = DEMO_VENUES.filter((v) => v.is_verified).slice(0, 3);
+async function getFeaturedVenues(): Promise<Venue[]> {
+  if (isSupabaseConfigured) {
+    const supabase = getSupabaseBrowserClient()!;
+    const { data } = await supabase
+      .from("venues")
+      .select("id, name, rating, is_verified, cloth_quality, table_specifications")
+      .order("is_verified", { ascending: false })
+      .order("rating", { ascending: false, nullsFirst: false })
+      .order("name")
+      .limit(3);
+    if (data && data.length > 0) return data as unknown as Venue[];
+  }
+  return DEMO_VENUES.filter((v) => v.is_verified).slice(0, 3);
+}
+
+export default async function HomePage() {
+  const featured = await getFeaturedVenues();
 
   return (
     <div className="space-y-14">
@@ -77,7 +97,7 @@ export default function HomePage() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Verified venues on the I-5 corridor</h2>
+          <h2 className="text-xl font-semibold">Venues on the corridor</h2>
           <Button asChild variant="ghost" size="sm">
             <Link href="/trip-planner">
               See all <ArrowRight />
@@ -91,13 +111,20 @@ export default function HomePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between gap-2 text-base">
                     {venue.name}
-                    <Badge variant="accent">
-                      <ShieldCheck className="h-3 w-3" /> Verified
-                    </Badge>
+                    {venue.is_verified && (
+                      <Badge variant="accent">
+                        <ShieldCheck className="h-3 w-3" /> Verified
+                      </Badge>
+                    )}
                   </CardTitle>
                   <CardDescription className="flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5" />
-                    {venue.rating} ★ · {venue.table_specifications?.[0]?.label}
+                    {venue.rating ? `${venue.rating} ★` : "unrated"}
+                    {venue.table_specifications?.[0]?.label
+                      ? ` · ${venue.table_specifications[0].label}`
+                      : venue.cloth_quality
+                        ? ` · ${venue.cloth_quality.replaceAll("_", " ")}`
+                        : ""}
                   </CardDescription>
                 </CardHeader>
               </Card>
