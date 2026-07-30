@@ -1,4 +1,4 @@
-// Bobby Billiards — venue sync (Supabase Edge Function, Deno).
+// Buddy Billiards — venue sync (Supabase Edge Function, Deno).
 //
 // Primary source: Google Places API (New). Fallback source: OpenStreetMap
 // Overpass (keyless), used per-region whenever the Google call fails or no
@@ -199,7 +199,7 @@ async function searchOsm(box: BoundingBox): Promise<VenueRow[]> {
     {
       headers: {
         Accept: "application/json",
-        "User-Agent": "BobbyBilliards/1.0 (venue sync; contact: admin@bobbybilliards.app)",
+        "User-Agent": "BuddyBilliards/1.0 (venue sync; contact: admin@buddybilliards.com)",
       },
     },
   );

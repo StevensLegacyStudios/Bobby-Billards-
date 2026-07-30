@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 const PLANS = {
   premium: {
-    name: "Bobby Billiards Premium",
+    name: "Buddy Billiards Premium",
     amountCents: Math.round(PREMIUM_PRICE_USD * 100),
   },
   verified_venue: {

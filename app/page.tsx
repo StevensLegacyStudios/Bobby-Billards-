@@ -66,7 +66,7 @@ export default async function HomePage() {
           Never drive past a great table again.
         </h1>
         <p className="text-lg text-muted-foreground">
-          Bobby Billiards maps every pool hall along your route, verifies the playing
+          Buddy Billiards maps every pool hall along your route, verifies the playing
           conditions, and sharpens your game with a 3D AI shot engine.
         </p>
         <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
