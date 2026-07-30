@@ -1,4 +1,4 @@
-# Bobby Billiards 🎱
+# Buddy Billiards 🎱
 
 Enterprise-grade billiard routing and spatial intelligence: find pool rooms inside the
 spatial corridor of any road trip, verify their real playing conditions, train shots on a

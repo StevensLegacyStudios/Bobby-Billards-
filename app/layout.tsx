@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Bobby Billiards — Billiard Routing & Spatial Intelligence",
-    template: "%s | Bobby Billiards",
+    default: "Buddy Billiards — Billiard Routing & Spatial Intelligence",
+    template: "%s | Buddy Billiards",
   },
   description:
     "Find verified billiard rooms along your route, validate table conditions, and train shots on an AI-powered 3D table.",

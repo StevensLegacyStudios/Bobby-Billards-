@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { Camera, Crosshair, Sparkles } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Camera, Check, Crosshair, Link2, Sparkles } from "lucide-react";
 
 import BilliardCanvasLazy from "@/components/billiards/billiard-canvas-lazy";
+import { ShotEditor, type ShotLayout } from "@/components/billiards/shot-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,31 +27,53 @@ import {
 import { cn } from "@/lib/utils";
 import type { CvDetection, TablePoint, TrajectoryPayload } from "@/lib/types";
 
-const PRESETS: {
-  name: string;
-  cue: TablePoint;
-  target: TablePoint;
-  pocket: keyof typeof POCKETS | "best";
-  bank?: Cushion;
-}[] = [
-  { name: "Straight in", cue: [56, 90], target: [120, 50], pocket: "top_right" },
-  { name: "Thin cut, corner", cue: [50, 80], target: [150, 30], pocket: "top_right" },
-  { name: "Side pocket cut", cue: [30, 30], target: [95, 60], pocket: "bottom_mid" },
-  { name: "One-rail bank", cue: [150, 20], target: [110, 60], pocket: "top_left", bank: "bottom" },
-  { name: "Solver's choice", cue: [25, 75], target: [170, 25], pocket: "best" },
+type EditorState = ShotLayout & { bank?: Cushion };
+
+const PRESETS: { name: string; state: EditorState }[] = [
+  { name: "Straight in", state: { cue: [56, 90], target: [120, 50], pocket: "top_right" } },
+  { name: "Thin cut, corner", state: { cue: [50, 80], target: [150, 30], pocket: "top_right" } },
+  { name: "Side pocket cut", state: { cue: [30, 30], target: [95, 60], pocket: "bottom_mid" } },
+  {
+    name: "One-rail bank",
+    state: { cue: [150, 20], target: [110, 60], pocket: "top_left", bank: "bottom" },
+  },
+  { name: "Solver's choice", state: { cue: [25, 75], target: [170, 25], pocket: "best" } },
 ];
 
-const POCKET_LABELS: Record<string, string> = {
-  top_left: "Top left",
-  top_mid: "Top side",
-  top_right: "Top right",
-  bottom_left: "Bottom left",
-  bottom_mid: "Bottom side",
-  bottom_right: "Bottom right",
-};
+function encodeShot(state: EditorState): string {
+  const payload = JSON.stringify([
+    Math.round(state.cue[0] * 10) / 10,
+    Math.round(state.cue[1] * 10) / 10,
+    Math.round(state.target[0] * 10) / 10,
+    Math.round(state.target[1] * 10) / 10,
+    state.pocket,
+  ]);
+  return btoa(payload).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
-export function RulesClient() {
-  const [presetIdx, setPresetIdx] = useState(0);
+function decodeShot(encoded: string): EditorState | null {
+  try {
+    const [cx, cy, tx, ty, pocket] = JSON.parse(
+      atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))
+    );
+    if (typeof cx !== "number" || typeof tx !== "number") return null;
+    return {
+      cue: [cx, cy] as TablePoint,
+      target: [tx, ty] as TablePoint,
+      pocket: pocket === "best" || pocket in POCKETS ? pocket : "best",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function RulesInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [editor, setEditor] = useState<EditorState>(PRESETS[0].state);
+  const [activePreset, setActivePreset] = useState<number | null>(0);
+  const [copied, setCopied] = useState(false);
   const [aiResult, setAiResult] = useState<{
     detections: CvDetection[];
     trajectory: TrajectoryPayload;
@@ -58,22 +82,52 @@ export function RulesClient() {
   const [aiError, setAiError] = useState<{ message: string; upgrade?: boolean } | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  const preset = PRESETS[presetIdx];
-  const solved = useMemo(() => {
-    if (preset.bank) {
-      return solveBankShot(preset.cue, preset.target, POCKETS[preset.pocket as string], preset.bank);
+  // Load a shared shot from ?shot= (state adjustment during render).
+  const shotParam = searchParams.get("shot");
+  const [loadedShot, setLoadedShot] = useState<string | null>(null);
+  if (shotParam && shotParam !== loadedShot) {
+    setLoadedShot(shotParam);
+    const shared = decodeShot(shotParam);
+    if (shared) {
+      setEditor(shared);
+      setActivePreset(null);
     }
-    if (preset.pocket === "best") return solveBestShot(preset.cue, preset.target);
-    return solveDirectShot(preset.cue, preset.target, POCKETS[preset.pocket]);
-  }, [preset]);
+  }
+
+  const solved = useMemo(() => {
+    if (editor.bank) {
+      return solveBankShot(editor.cue, editor.target, POCKETS[editor.pocket as string], editor.bank);
+    }
+    if (editor.pocket === "best") return solveBestShot(editor.cue, editor.target);
+    return solveDirectShot(editor.cue, editor.target, POCKETS[editor.pocket]);
+  }, [editor]);
+
+  const updateEditor = useCallback((next: ShotLayout) => {
+    setEditor((prev) => ({ ...next, bank: prev.bank && next.pocket === prev.pocket ? prev.bank : undefined }));
+    setActivePreset(null);
+    setAiResult(null);
+  }, []);
+
+  const shareShot = useCallback(async () => {
+    const id = encodeShot(editor);
+    const url = `${window.location.origin}/rules?shot=${id}`;
+    router.replace(`/rules?shot=${id}`, { scroll: false });
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Clipboard unavailable — the URL is in the address bar.
+    }
+  }, [editor, router]);
 
   // When the AI engine has produced a result, render its table read instead.
   const activeCue = aiResult
-    ? aiResult.detections.find((d) => d.label === "cue_ball")?.tablePoint ?? preset.cue
-    : preset.cue;
+    ? aiResult.detections.find((d) => d.label === "cue_ball")?.tablePoint ?? editor.cue
+    : editor.cue;
   const activeObjects = aiResult
     ? aiResult.detections.filter((d) => d.label === "object_ball").map((d) => d.tablePoint!)
-    : [preset.target];
+    : [editor.target];
   const activeTrajectory = aiResult ? aiResult.trajectory : solved;
 
   /**
@@ -132,11 +186,12 @@ export function RulesClient() {
     <div className="space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Crosshair className="h-6 w-6 text-primary" /> 3D Practice &amp; AI Shot Engine
+          <Crosshair className="h-6 w-6 text-primary" /> Shot Lab
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          The trajectory solver computes ghost-ball contacts and mirror-law bank reflections
-          on a tournament 2:1 slate. Feed it a preset — or a camera frame.
+          Set up any layout — drag the balls to match your real table — and the solver
+          computes the make: ghost-ball contact, cut angle, banks. Share a shot and ask
+          your league how they&apos;d play it.
         </p>
       </div>
 
@@ -145,12 +200,13 @@ export function RulesClient() {
           <button
             key={p.name}
             onClick={() => {
-              setPresetIdx(i);
+              setEditor(p.state);
+              setActivePreset(i);
               setAiResult(null);
             }}
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-              i === presetIdx && !aiResult
+              i === activePreset && !aiResult
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border text-muted-foreground hover:border-primary/50"
             )}
@@ -160,6 +216,9 @@ export function RulesClient() {
         ))}
         <Button size="sm" variant="outline" onClick={analyzeFrame} disabled={analyzing}>
           <Camera /> {analyzing ? "Analyzing…" : "Analyze camera frame (AI)"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={shareShot}>
+          {copied ? <Check /> : <Link2 />} {copied ? "Link copied!" : "Share this shot"}
         </Button>
       </div>
 
@@ -176,13 +235,26 @@ export function RulesClient() {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <BilliardCanvasLazy
-          cue={activeCue}
-          objects={activeObjects}
-          trajectory={activeTrajectory}
-        />
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Shot editor</CardTitle>
+            <CardDescription>Top-down view — drag balls, tap a pocket.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ShotEditor layout={editor} trajectory={solved} onChange={updateEditor} />
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <BilliardCanvasLazy
+            cue={activeCue}
+            objects={activeObjects}
+            trajectory={activeTrajectory}
+            className="h-full min-h-[340px] w-full"
+          />
+        </Card>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -220,7 +292,7 @@ export function RulesClient() {
               <Sparkles className="h-4 w-4 text-primary" /> AI table read
             </CardTitle>
             <CardDescription>
-              YOLOv8 detections projected through the homography layer onto the 200×100 canvas.
+              Detections projected through the homography layer onto the 200×100 canvas.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -246,14 +318,21 @@ export function RulesClient() {
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No frame analyzed yet. Free tier includes 3 AI shot uploads per month —{" "}
-                {POCKET_LABELS.top_right ? "then" : ""} Premium unlocks unlimited analysis and
-                the pro camera module.
+                No frame analyzed yet. Free tier includes 3 AI shot uploads per month —
+                Premium unlocks unlimited analysis and the pro camera module.
               </p>
             )}
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+export function RulesClient() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-muted-foreground">Racking…</div>}>
+      <RulesInner />
+    </Suspense>
   );
 }

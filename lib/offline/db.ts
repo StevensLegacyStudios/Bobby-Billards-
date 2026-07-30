@@ -13,7 +13,7 @@ import type { Trip, Venue } from "@/lib/types";
  * stretches.
  */
 
-interface BobbyBilliardsDB extends DBSchema {
+interface BuddyBilliardsDB extends DBSchema {
   corridors: {
     key: string;
     value: {
@@ -38,14 +38,14 @@ interface BobbyBilliardsDB extends DBSchema {
   };
 }
 
-const DB_NAME = "bobby-billiards-offline";
+const DB_NAME = "buddy-billiards-offline";
 const DB_VERSION = 1;
 
-let dbPromise: Promise<IDBPDatabase<BobbyBilliardsDB>> | null = null;
+let dbPromise: Promise<IDBPDatabase<BuddyBilliardsDB>> | null = null;
 
 function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<BobbyBilliardsDB>(DB_NAME, DB_VERSION, {
+    dbPromise = openDB<BuddyBilliardsDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
         db.createObjectStore("corridors", { keyPath: "tripId" });
         const tiles = db.createObjectStore("tiles", { keyPath: "key" });

@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
 
   uploads.count += 1;
   const response = NextResponse.json({
-    model: "bobby-billiards-yolov8n-table/2.1.0",
+    model: "buddy-billiards-yolov8n-table/2.1.0",
     frame: { width: FRAME_SIZE, height: FRAME_SIZE, format: "webp" },
     homography: H,
     detections,
