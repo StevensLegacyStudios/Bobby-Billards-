@@ -14,6 +14,8 @@ export interface Drill {
   setup: string;
   goal: string;
   scoring: string;
+  /** Natural max for a scoring pass, when the drill has an obvious one. */
+  maxScore?: number;
   layout: {
     cue: TablePoint;
     objects: TablePoint[];
@@ -48,6 +50,7 @@ export const DRILLS: Drill[] = [
     goal: "Pocket the ball AND land the cue ball exactly where you called it: stop, one diamond of follow, or one diamond of draw.",
     scoring:
       "10 shots per pass: 1 point for the pocket, 1 for the cue-ball target. 16+ / 20 means your fundamentals are tournament-ready.",
+    maxScore: 20,
     layout: {
       cue: [55, 82],
       objects: [[100, 50]],
@@ -62,6 +65,7 @@ export const DRILLS: Drill[] = [
     goal: "Run out. Every rack you finish beats the ghost; every miss loses the rack instantly.",
     scoring:
       "Track your score across races. Beating the 9-ball ghost consistently ≈ 600+ Fargo speed. Too hard? Play the 5-ball or 7-ball ghost and work up — that's the progressive version.",
+    maxScore: 7,
     layout: {
       cue: [40, 60],
       objects: nineBallRack(),
@@ -76,6 +80,7 @@ export const DRILLS: Drill[] = [
     goal: "Hit every spoke of the wheel: each rail target, using follow, draw, and english as needed.",
     scoring:
       "1 point per spoke reached within one ball's width. 6 targets per cycle — a full wheel with no misses is shortstop level.",
+    maxScore: 6,
     layout: {
       cue: [70, 75],
       objects: [[100, 35], [30, 12], [60, 8], [140, 8], [170, 30], [170, 70], [140, 92]],
@@ -104,6 +109,7 @@ export const DRILLS: Drill[] = [
     goal: "Same shot ten times: dead stop ×3, then exactly one diamond of follow ×3, then one, two, three diamonds of draw.",
     scoring:
       "Cue ball must finish within one ball's width of the called distance. 8/10 at three diamonds apart, then move the shot a diamond longer.",
+    maxScore: 10,
     layout: {
       cue: [60, 65],
       objects: [[120, 43]],
@@ -118,6 +124,7 @@ export const DRILLS: Drill[] = [
     goal: "Land the returning cue ball inside the called zone — the same touch that floats you into perfect shape.",
     scoring:
       "10 lags: 1 point inside a diamond, 2 points within half a diamond of the head rail. 14+ is pro-lag territory.",
+    maxScore: 20,
     layout: {
       cue: [50, 50],
       objects: [],
@@ -132,6 +139,7 @@ export const DRILLS: Drill[] = [
     goal: "Cut it down the rail into the corner. Then move the cue ball one diamond tougher and repeat.",
     scoring:
       "5 makes from each of 4 cue-ball positions. Rail-frozen balls want a firm stroke and a touch of inside english — log which positions leak points.",
+    maxScore: 20,
     layout: {
       cue: [100, 60],
       objects: [[160, 6]],

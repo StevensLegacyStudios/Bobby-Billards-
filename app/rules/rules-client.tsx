@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -12,6 +12,8 @@ import {
   Link2,
   Loader2,
   Sparkles,
+  Trash2,
+  TrendingUp,
 } from "lucide-react";
 
 import BilliardCanvasLazy from "@/components/billiards/billiard-canvas-lazy";
@@ -19,7 +21,11 @@ import { ShotEditor, type ShotLayout } from "@/components/billiards/shot-editor"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DRILLS, SYSTEMS } from "@/lib/drills";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/use-auth";
+import { deleteScore, getScores, logScore, type DrillScore } from "@/lib/drill-scores";
+import { DRILLS, SYSTEMS, type Drill } from "@/lib/drills";
 import {
   POCKETS,
   solveBankShot,
@@ -99,6 +105,295 @@ interface AiResult {
   notes?: string;
   labels?: string[];
   usage: { uploadsThisMonth: number; monthlyLimit: number | null };
+}
+
+/** Compact relative timestamp: "just now", "5m ago", "3d ago"… */
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+/** Inline trendline of the last 10 scores — no chart library, just a polyline. */
+function Sparkline({ scores }: { scores: DrillScore[] }) {
+  // scores arrive newest-first; plot the last 10 in chronological order.
+  const values = scores
+    .slice(0, 10)
+    .map((s) => s.score)
+    .reverse();
+  if (values.length < 2) return null;
+
+  const w = 300;
+  const h = 44;
+  const padX = 6;
+  const padY = 7;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const points = values.map((v, i) => {
+    const x = padX + (i / (values.length - 1)) * (w - 2 * padX);
+    const y = h - padY - ((v - min) / span) * (h - 2 * padY);
+    return [x, y] as const;
+  });
+  const [lastX, lastY] = points[points.length - 1];
+
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      className="h-11 w-full"
+      role="img"
+      aria-label={`Trendline of your last ${values.length} scores`}
+    >
+      <polyline
+        points={points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
+        fill="none"
+        stroke="var(--primary)"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+        opacity={0.85}
+      />
+      <circle cx={lastX} cy={lastY} r={3} fill="var(--primary)" />
+    </svg>
+  );
+}
+
+/**
+ * "Track it" card — quick score logging + personal history for one drill.
+ * Render with key={drill.key} so switching drills resets the form state.
+ */
+function DrillTracker({ drill }: { drill: Drill }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
+  const [scores, setScores] = useState<DrillScore[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [scoreInput, setScoreInput] = useState("");
+  const [outOfInput, setOutOfInput] = useState(drill.maxScore?.toString() ?? "");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    let cancelled = false;
+    getScores(drill.key)
+      .then((rows) => {
+        if (!cancelled) setScores(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load your score history.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [drill.key]);
+
+  // Load history for the selected drill (and reload once auth state settles).
+  useEffect(() => refresh(), [refresh, userId]);
+
+  const submit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const score = Number(scoreInput);
+      if (!Number.isFinite(score)) return;
+      const outOf = Number(outOfInput);
+      const entry = {
+        drillKey: drill.key,
+        score,
+        maxScore: outOfInput.trim() !== "" && Number.isFinite(outOf) ? outOf : undefined,
+        note: note.trim() || undefined,
+      };
+
+      // Optimistic: show the entry immediately, reconcile once it's stored.
+      const temp: DrillScore = {
+        id: `pending-${Date.now()}`,
+        drillKey: entry.drillKey,
+        score: entry.score,
+        maxScore: entry.maxScore,
+        note: entry.note,
+        createdAt: new Date().toISOString(),
+      };
+      setScores((prev) => [temp, ...prev]);
+      setScoreInput("");
+      setNote("");
+      setSaving(true);
+      setError(null);
+      try {
+        const saved = await logScore(entry);
+        setScores((prev) => prev.map((s) => (s.id === temp.id ? saved : s)));
+      } catch {
+        setScores((prev) => prev.filter((s) => s.id !== temp.id));
+        setError("Couldn't save that score — try again.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [drill.key, scoreInput, outOfInput, note]
+  );
+
+  const remove = useCallback(
+    async (id: string) => {
+      setScores((prev) => prev.filter((s) => s.id !== id));
+      try {
+        await deleteScore(id);
+      } catch {
+        setError("Couldn't delete that entry.");
+        refresh();
+      }
+    },
+    [refresh]
+  );
+
+  const best = scores.reduce<number | null>(
+    (m, s) => (m === null || s.score > m ? s.score : m),
+    null
+  );
+  const lastFive = scores.slice(0, 5);
+  const lastFiveAvg =
+    lastFive.length > 0
+      ? lastFive.reduce((sum, s) => sum + s.score, 0) / lastFive.length
+      : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <TrendingUp className="h-4 w-4 text-primary" /> Track it
+        </CardTitle>
+        <CardDescription>
+          Log a score every time you run this drill and watch your trendline.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="drill-score">Score</Label>
+            <Input
+              id="drill-score"
+              type="number"
+              inputMode="numeric"
+              required
+              min={0}
+              step={1}
+              value={scoreInput}
+              onChange={(e) => setScoreInput(e.target.value)}
+              placeholder={drill.maxScore ? `0–${drill.maxScore}` : "0"}
+              className="w-24"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="drill-out-of" className="text-muted-foreground">
+              Out of
+            </Label>
+            <Input
+              id="drill-out-of"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={outOfInput}
+              onChange={(e) => setOutOfInput(e.target.value)}
+              placeholder="—"
+              className="w-20"
+            />
+          </div>
+          <div className="min-w-44 flex-1 space-y-1.5">
+            <Label htmlFor="drill-note" className="text-muted-foreground">
+              Note
+            </Label>
+            <Input
+              id="drill-note"
+              value={note}
+              maxLength={140}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. draw shots leaking left"
+            />
+          </div>
+          <Button type="submit" disabled={saving || scoreInput.trim() === ""}>
+            {saving && <Loader2 className="animate-spin" />} Log
+          </Button>
+        </form>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading your history…</p>
+        ) : scores.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            First time running this drill? Log a score and start your trendline.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {best !== null && (
+                <Badge>
+                  Personal best {best}
+                  {drill.maxScore ? ` / ${drill.maxScore}` : ""}
+                </Badge>
+              )}
+              {lastFiveAvg !== null && (
+                <Badge variant="secondary">
+                  Last {lastFive.length} avg {lastFiveAvg.toFixed(1)}
+                </Badge>
+              )}
+              <Badge variant="outline">
+                {scores.length} {scores.length === 1 ? "entry" : "entries"}
+              </Badge>
+            </div>
+
+            <Sparkline scores={scores} />
+
+            <ul className="divide-y divide-border/60">
+              {scores.slice(0, 8).map((s) => (
+                <li key={s.id} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="w-14 shrink-0 font-semibold tabular-nums">
+                    {s.score}
+                    {s.maxScore != null && (
+                      <span className="font-normal text-muted-foreground">/{s.maxScore}</span>
+                    )}
+                  </span>
+                  <span className="w-16 shrink-0 text-xs text-muted-foreground">
+                    {timeAgo(s.createdAt)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{s.note}</span>
+                  <button
+                    onClick={() => void remove(s.id)}
+                    aria-label="Delete this entry"
+                    className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!user && (
+          <p className="text-xs text-muted-foreground">
+            Scores save to this device —{" "}
+            <Link href="/account" className="underline underline-offset-2 hover:text-foreground">
+              sign in
+            </Link>{" "}
+            to keep them everywhere.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function ShotLabInner() {
@@ -484,6 +779,8 @@ function ShotLabInner() {
               </CardContent>
             </Card>
           </div>
+
+          <DrillTracker key={drill.key} drill={drill} />
         </>
       )}
 
