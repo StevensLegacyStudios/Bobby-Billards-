@@ -97,4 +97,14 @@ export interface VenueEvent {
   title: string;
   starts_at: string;
   details: string;
+  /** True for weekly recurring events (league nights, weekly tournaments). */
+  recurs_weekly?: boolean;
+  /** 0 = Sunday .. 6 = Saturday; set only when recurs_weekly is true. */
+  weekday?: number | null;
+  entry_fee_cents?: number | null;
+  /** e.g. "Race to 5". */
+  race_format?: string | null;
+  /** e.g. "Under 600". */
+  fargo_range?: string | null;
+  created_by?: string | null;
 }

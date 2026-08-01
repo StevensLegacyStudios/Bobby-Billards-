@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuth } from "@/hooks/use-auth";
 import { useTier } from "@/hooks/use-tier";
 import { PREMIUM_PRICE_USD } from "@/lib/tier";
 
@@ -35,6 +36,7 @@ export function UpgradeClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { tier, isPremium, refresh } = useTier();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const success = searchParams.get("success");
@@ -45,7 +47,11 @@ export function UpgradeClient() {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "premium" }),
+        body: JSON.stringify({
+          plan: "premium",
+          userId: user?.id ?? null,
+          email: user?.email ?? null,
+        }),
       });
       const data = await res.json();
       if (data.url?.startsWith("http")) {

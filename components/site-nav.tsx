@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, Crown, Crosshair, Route, UserRound } from "lucide-react";
+import { Briefcase, Crown, Crosshair, Moon, Route, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,6 +40,7 @@ function EightBall({ className }: { className?: string }) {
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: null },
+  { href: "/tonight", label: "Tonight", icon: Moon },
   { href: "/trip-planner", label: "Trips", icon: Route },
   { href: "/rules", label: "Shot Lab", icon: Crosshair },
   { href: "/upgrade", label: "Premium", icon: Crown },
@@ -104,7 +105,7 @@ export function SiteNav() {
 
       {/* Mobile bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur-md sm:hidden">
-        <div className="grid grid-cols-6">
+        <div className="grid grid-cols-7">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
