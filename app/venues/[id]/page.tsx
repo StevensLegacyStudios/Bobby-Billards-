@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/card";
 import { DEMO_EVENTS, findDemoVenue } from "@/lib/demo-data";
 import { solveDirectShot, POCKETS } from "@/lib/engine/trajectory";
+import { WEEKDAY_NAMES } from "@/lib/hours";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { Venue } from "@/lib/types";
+import type { Venue, VenueEvent } from "@/lib/types";
 
 import { ValidationForm } from "./validation-form";
 
@@ -39,6 +40,37 @@ async function fetchVenue(id: string): Promise<Venue | null> {
   return findDemoVenue(id) ?? null;
 }
 
+async function fetchVenueEvents(venueId: string): Promise<VenueEvent[]> {
+  if (isSupabaseConfigured) {
+    const supabase = getSupabaseBrowserClient()!;
+    const { data, error } = await supabase
+      .from("venue_events")
+      .select("*")
+      .eq("venue_id", venueId)
+      .order("starts_at", { ascending: true });
+    if (error || !data) return []; // With a live database, demo events would mislead.
+    return data as VenueEvent[];
+  }
+  return DEMO_EVENTS.filter((e) => e.venue_id === venueId);
+}
+
+/** "Every Tuesday, 7pm" or "Aug 8, 2026, 12:00 PM". */
+function formatEventWhen(event: VenueEvent): string {
+  const starts = new Date(event.starts_at);
+  if (event.recurs_weekly && event.weekday != null && WEEKDAY_NAMES[event.weekday]) {
+    const hour = starts.getHours();
+    const minute = starts.getMinutes();
+    const meridiem = hour >= 12 ? "pm" : "am";
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    const time =
+      minute === 0
+        ? `${hour12}${meridiem}`
+        : `${hour12}:${String(minute).padStart(2, "0")}${meridiem}`;
+    return `Every ${WEEKDAY_NAMES[event.weekday]}, ${time}`;
+  }
+  return starts.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -58,7 +90,7 @@ export default async function VenuePage({
   const venue = await fetchVenue(id);
   if (!venue) notFound();
 
-  const events = DEMO_EVENTS.filter((e) => e.venue_id === venue.id);
+  const events = await fetchVenueEvents(venue.id);
   const houseShot = solveDirectShot([45, 65], [130, 42], POCKETS.top_right);
 
   return (
@@ -159,15 +191,32 @@ export default async function VenuePage({
               <Card key={event.id}>
                 <CardHeader>
                   <CardTitle className="text-base">{event.title}</CardTitle>
-                  <CardDescription>
-                    <Badge variant="outline" className="mr-2">
-                      {event.kind}
-                    </Badge>
-                    {new Date(event.starts_at).toLocaleString("en-US", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                    <span className="mt-1 block">{event.details}</span>
+                  <CardDescription className="space-y-1.5">
+                    <span className="block">
+                      <Badge variant="outline" className="mr-2 capitalize">
+                        {event.kind}
+                      </Badge>
+                      {formatEventWhen(event)}
+                    </span>
+                    {(event.entry_fee_cents != null || event.race_format || event.fargo_range) && (
+                      <span className="flex flex-wrap gap-1.5">
+                        {event.entry_fee_cents != null && (
+                          <Badge variant="secondary">
+                            {event.entry_fee_cents % 100 === 0
+                              ? `$${event.entry_fee_cents / 100}`
+                              : `$${(event.entry_fee_cents / 100).toFixed(2)}`}{" "}
+                            entry
+                          </Badge>
+                        )}
+                        {event.race_format && (
+                          <Badge variant="secondary">{event.race_format}</Badge>
+                        )}
+                        {event.fargo_range && (
+                          <Badge variant="secondary">Fargo {event.fargo_range}</Badge>
+                        )}
+                      </span>
+                    )}
+                    {event.details && <span className="block">{event.details}</span>}
                   </CardDescription>
                 </CardHeader>
               </Card>
