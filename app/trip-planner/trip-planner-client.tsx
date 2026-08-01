@@ -1,65 +1,126 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Car,
   Check,
   Clock,
   Download,
   Link2,
+  Loader2,
   MapPin,
   Megaphone,
   Route,
   ShieldCheck,
+  Star,
   Trash2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useOfflineMaps } from "@/hooks/use-offline-maps";
 import { useTier } from "@/hooks/use-tier";
-import { DEMO_CAMPAIGNS, DEMO_CITIES, DEMO_VENUES } from "@/lib/demo-data";
+import { DEMO_CAMPAIGNS, DEMO_VENUES } from "@/lib/demo-data";
 import { distanceToPolylineMeters, toWktLineString, type LngLat } from "@/lib/geo";
+import { geocodeCity, searchPlaces, type GeocodedPlace } from "@/lib/geocode";
+import { fetchDrivingRoute } from "@/lib/routing";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { decodeTripId, encodeTripId } from "@/lib/trips";
+import { formatDriveTime, formatMiles, milesToMeters } from "@/lib/units";
 import type { Trip, Venue } from "@/lib/types";
 
-function geocode(name: string): LngLat | null {
-  return DEMO_CITIES[name.trim().toLowerCase()] ?? null;
-}
+const TripMap = dynamic(() => import("@/components/trip-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[420px] w-full items-center justify-center rounded-xl bg-card">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  ),
+});
 
-/**
- * Approximate a driving route: straight line origin → destination, detoured
- * through any known waypoint city lying within 3x the corridor buffer.
- * (A production build would call a routing provider here.)
- */
-function buildPolyline(origin: LngLat, destination: LngLat, bufferMeters: number): LngLat[] {
-  const direct: LngLat[] = [origin, destination];
-  const waypoints = Object.values(DEMO_CITIES)
-    .filter((c) => c !== origin && c !== destination)
-    .filter((c) => distanceToPolylineMeters(c, direct) < bufferMeters * 3)
-    .map((c) => {
-      // Sort by progress along the route.
-      const t =
-        ((c[0] - origin[0]) * (destination[0] - origin[0]) +
-          (c[1] - origin[1]) * (destination[1] - origin[1])) /
-        ((destination[0] - origin[0]) ** 2 + (destination[1] - origin[1]) ** 2 || 1);
-      return { c, t };
-    })
-    .filter(({ t }) => t > 0.05 && t < 0.95)
-    .sort((a, b) => a.t - b.t)
-    .map(({ c }) => c);
-  return [origin, ...waypoints, destination];
+const FREE_MAX_DETOUR_MI = 10;
+const PREMIUM_MAX_DETOUR_MI = 60;
+
+/** City input with live geocoder suggestions (any US city, not a canned list). */
+function CityInput({
+  id,
+  label,
+  value,
+  onChange,
+  onResolved,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onResolved: (place: GeocodedPlace | null) => void;
+  placeholder: string;
+}) {
+  const [suggestions, setSuggestions] = useState<GeocodedPlace[]>([]);
+  const [open, setOpen] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleInput = (next: string) => {
+    onChange(next);
+    onResolved(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const places = await searchPlaces(next, controller.signal);
+        setSuggestions(places);
+        setOpen(places.length > 0);
+      } catch {
+        // Aborted — a newer keystroke owns the request.
+      }
+    }, 250);
+  };
+
+  return (
+    <div className="relative space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => handleInput(e.target.value)}
+        onFocus={() => setOpen(suggestions.length > 0)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <ul className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
+          {suggestions.map((p) => (
+            <li key={`${p.label}-${p.lngLat.join(",")}`}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange(p.label);
+                  onResolved(p);
+                  setOpen(false);
+                }}
+              >
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                {p.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export function TripPlannerClient() {
@@ -67,68 +128,83 @@ export function TripPlannerClient() {
   const searchParams = useSearchParams();
   const { isPremium } = useTier();
   const offline = useOfflineMaps();
+  const maxDetour = isPremium ? PREMIUM_MAX_DETOUR_MI : FREE_MAX_DETOUR_MI;
 
-  const [origin, setOrigin] = useState("Stockton");
-  const [destination, setDestination] = useState("San Jose");
-  const [bufferKm, setBufferKm] = useState(8);
+  const [origin, setOrigin] = useState("Stockton, CA");
+  const [destination, setDestination] = useState("San Jose, CA");
+  const [originPlace, setOriginPlace] = useState<GeocodedPlace | null>(null);
+  const [destinationPlace, setDestinationPlace] = useState<GeocodedPlace | null>(null);
+  const [bufferMi, setBufferMi] = useState(5);
+  const [planning, setPlanning] = useState(false);
   const [trip, setTrip] = useState<Trip | null>(null);
+  const [drive, setDrive] = useState<{ distanceMeters: number; durationSeconds: number; isRoadRoute: boolean } | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [queryMs, setQueryMs] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [adNotice, setAdNotice] = useState<string | null>(null);
 
   const runCorridorQuery = useCallback(async (activeTrip: Trip) => {
-    const started = performance.now();
-    const supabase = getSupabaseBrowserClient();
-
-    if (supabase) {
-      const { data, error: rpcError } = await supabase.rpc("get_venues_in_corridor", {
-        route_polyline: toWktLineString(activeTrip.polyline),
-        buffer_meters: activeTrip.buffer_meters,
-      });
-      if (!rpcError && data) {
-        setVenues(data as Venue[]);
-        setQueryMs(performance.now() - started);
-        return;
+    setSearching(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      if (supabase) {
+        const { data, error: rpcError } = await supabase.rpc("get_venues_in_corridor", {
+          route_polyline: toWktLineString(activeTrip.polyline),
+          buffer_meters: activeTrip.buffer_meters,
+        });
+        if (!rpcError && data) {
+          setVenues(data as Venue[]);
+          return;
+        }
       }
-      // Fall through to demo data on RPC failure so the page stays usable.
+      const matched = DEMO_VENUES.map((v) => ({
+        ...v,
+        distance_from_route_m: distanceToPolylineMeters([v.lng, v.lat], activeTrip.polyline),
+      }))
+        .filter((v) => v.distance_from_route_m! <= activeTrip.buffer_meters)
+        .sort((a, b) => a.distance_from_route_m! - b.distance_from_route_m!);
+      setVenues(matched);
+    } finally {
+      setSearching(false);
     }
-
-    const matched = DEMO_VENUES.map((v) => ({
-      ...v,
-      distance_from_route_m: distanceToPolylineMeters([v.lng, v.lat], activeTrip.polyline),
-    }))
-      .filter((v) => v.distance_from_route_m! <= activeTrip.buffer_meters)
-      .sort((a, b) => a.distance_from_route_m! - b.distance_from_route_m!);
-    setVenues(matched);
-    setQueryMs(performance.now() - started);
   }, []);
 
-  const planTrip = useCallback(
-    (originName: string, destinationName: string, bufferMeters: number) => {
-      const from = geocode(originName);
-      const to = geocode(destinationName);
-      if (!from || !to) {
-        setError(
-          `Unknown city. Demo geocoder knows: ${Object.keys(DEMO_CITIES)
-            .map((c) => c.replace(/\b\w/g, (m) => m.toUpperCase()))
-            .join(", ")}.`
-        );
+  const planTrip = useCallback(async () => {
+    setPlanning(true);
+    setError(null);
+    try {
+      const from = originPlace ?? (await geocodeCity(origin));
+      const to = destinationPlace ?? (await geocodeCity(destination));
+      if (!from) {
+        setError(`Couldn't find "${origin}" — try adding the state, like "Half Moon Bay, CA".`);
         return;
       }
-      setError(null);
+      if (!to) {
+        setError(`Couldn't find "${destination}" — try adding the state, like "Monterey, CA".`);
+        return;
+      }
+      setOriginPlace(from);
+      setDestinationPlace(to);
+
+      const route = await fetchDrivingRoute(from.lngLat, to.lngLat);
+      setDrive({
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
+        isRoadRoute: route.isRoadRoute,
+      });
       setTrip({
         id: crypto.randomUUID(),
-        origin: originName,
-        destination: destinationName,
-        polyline: buildPolyline(from, to, bufferMeters),
-        buffer_meters: bufferMeters,
+        origin: from.label,
+        destination: to.label,
+        polyline: route.polyline,
+        buffer_meters: milesToMeters(Math.min(bufferMi, maxDetour)),
         created_at: new Date().toISOString(),
       });
-    },
-    []
-  );
+    } finally {
+      setPlanning(false);
+    }
+  }, [origin, destination, originPlace, destinationPlace, bufferMi, maxDetour]);
 
   // Hydrate from a shared ?tripId= link — state adjustment during render.
   const tripIdParam = searchParams.get("tripId");
@@ -139,8 +215,9 @@ export function TripPlannerClient() {
     if (shared && shared.id !== trip?.id) {
       setOrigin(shared.origin);
       setDestination(shared.destination);
-      setBufferKm(Math.round(shared.buffer_meters / 1000));
+      setBufferMi(Math.max(1, Math.round(shared.buffer_meters / 1609.344)));
       setTrip(shared);
+      setDrive(null);
     }
   }
 
@@ -188,61 +265,64 @@ export function TripPlannerClient() {
       });
       if (res.ok) {
         const data = await res.json();
-        setAdNotice(`Sponsored click billed: ${(data.chargedCents / 100).toFixed(2)} USD (second-price auction)`);
+        setAdNotice(`Sponsored click billed: ${(data.chargedCents / 100).toFixed(2)} USD`);
         setTimeout(() => setAdNotice(null), 4000);
       }
     },
     [trip]
   );
 
+  const mapOrigin = trip
+    ? { name: trip.origin, lngLat: trip.polyline[0] as LngLat }
+    : undefined;
+  const mapDestination = trip
+    ? { name: trip.destination, lngLat: trip.polyline[trip.polyline.length - 1] as LngLat }
+    : undefined;
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Route className="h-6 w-6 text-primary" /> Corridor Trip Planner
+        <h1 className="flex items-center gap-2 text-2xl font-bold sm:text-3xl">
+          <Route className="h-7 w-7 text-primary" /> Road Trip Planner
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Outline a route and we&apos;ll buffer it into a spatial corridor to find every
-          billiard room worth a detour.
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+          Enter any two cities and see every pool room worth a detour — on a real map,
+          with real driving routes and distances in miles.
         </p>
       </div>
 
       <Card>
         <CardContent className="grid gap-4 p-6 sm:grid-cols-[1fr_1fr_auto_auto]">
+          <CityInput
+            id="origin"
+            label="From"
+            value={origin}
+            onChange={setOrigin}
+            onResolved={setOriginPlace}
+            placeholder="Stockton, CA"
+          />
+          <CityInput
+            id="destination"
+            label="To"
+            value={destination}
+            onChange={setDestination}
+            onResolved={setDestinationPlace}
+            placeholder="Half Moon Bay, CA"
+          />
           <div className="space-y-1.5">
-            <Label htmlFor="origin">Origin</Label>
-            <Input
-              id="origin"
-              list="bb-cities"
-              value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
-              placeholder="Stockton"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="destination">Destination</Label>
-            <Input
-              id="destination"
-              list="bb-cities"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              placeholder="San Jose"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="buffer">Detour buffer (km)</Label>
+            <Label htmlFor="buffer">Max detour (miles)</Label>
             <Input
               id="buffer"
               type="number"
               min={1}
-              max={isPremium ? 100 : 15}
-              value={bufferKm}
-              onChange={(e) => setBufferKm(Number(e.target.value) || 1)}
+              max={maxDetour}
+              value={bufferMi}
+              onChange={(e) => setBufferMi(Number(e.target.value) || 1)}
               className="w-full sm:w-32"
             />
             {!isPremium && (
               <p className="text-[11px] text-muted-foreground">
-                Free tier caps detours at 15 km.{" "}
+                Free tier caps detours at {FREE_MAX_DETOUR_MI} mi.{" "}
                 <Link href="/upgrade" className="text-primary underline">
                   Upgrade
                 </Link>
@@ -250,19 +330,11 @@ export function TripPlannerClient() {
             )}
           </div>
           <div className="flex items-end">
-            <Button
-              onClick={() =>
-                planTrip(origin, destination, Math.min(bufferKm, isPremium ? 100 : 15) * 1000)
-              }
-            >
-              Find venues
+            <Button onClick={() => void planTrip()} disabled={planning}>
+              {planning ? <Loader2 className="animate-spin" /> : <Route />}
+              {planning ? "Routing…" : "Find pool rooms"}
             </Button>
           </div>
-          <datalist id="bb-cities">
-            {Object.keys(DEMO_CITIES).map((c) => (
-              <option key={c} value={c.replace(/\b\w/g, (m) => m.toUpperCase())} />
-            ))}
-          </datalist>
         </CardContent>
       </Card>
 
@@ -277,13 +349,21 @@ export function TripPlannerClient() {
           <Badge variant="secondary">
             {trip.origin} → {trip.destination}
           </Badge>
-          {queryMs !== null && (
-            <Badge variant={queryMs <= 150 ? "accent" : "outline"}>
-              <Clock className="h-3 w-3" /> corridor query {queryMs.toFixed(0)}ms
-              {queryMs <= 150 ? " ✓ <150ms budget" : ""}
+          {drive && (
+            <Badge variant="outline">
+              <Car className="h-3 w-3" /> {formatMiles(drive.distanceMeters)}
+              {drive.isRoadRoute ? ` · ${formatDriveTime(drive.durationSeconds)}` : " (straight-line est.)"}
             </Badge>
           )}
-          <Badge variant="outline">{venues.length} venues in corridor</Badge>
+          <Badge variant="outline">
+            {searching ? (
+              <>
+                <Clock className="h-3 w-3 animate-pulse" /> searching…
+              </>
+            ) : (
+              `${venues.length} pool room${venues.length === 1 ? "" : "s"} on route`
+            )}
+          </Badge>
           <Button size="sm" variant="outline" onClick={shareTrip}>
             {copied ? <Check /> : <Link2 />} {copied ? "Link copied" : "Share trip"}
           </Button>
@@ -312,6 +392,19 @@ export function TripPlannerClient() {
         </div>
       )}
 
+      {trip && (
+        <Card className="overflow-hidden p-0">
+          <TripMap
+            route={trip.polyline as LngLat[]}
+            bufferMeters={trip.buffer_meters}
+            venues={venues}
+            origin={mapOrigin}
+            destination={mapDestination}
+            className="h-[420px] w-full sm:h-[480px]"
+          />
+        </Card>
+      )}
+
       {adNotice && (
         <div className="rounded-md border border-accent bg-accent/10 px-3 py-2 text-xs">
           {adNotice}
@@ -334,7 +427,7 @@ export function TripPlannerClient() {
               </CardTitle>
               <CardDescription>
                 Boosted along your route · {boosted.venue.rating} ★ ·{" "}
-                {(boosted.venue.distance_from_route_m! / 1000).toFixed(1)} km off corridor
+                {formatMiles(boosted.venue.distance_from_route_m!)} off route
               </CardDescription>
             </CardHeader>
           </Card>
@@ -346,7 +439,7 @@ export function TripPlannerClient() {
           .filter((v) => v.id !== boosted?.venue.id)
           .map((venue) => (
             <Link key={venue.id} href={`/venues/${venue.id}`}>
-              <Card className="h-full transition-colors hover:border-primary/50">
+              <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/5">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between gap-2 text-base">
                     {venue.name}
@@ -357,10 +450,15 @@ export function TripPlannerClient() {
                     )}
                   </CardTitle>
                   <CardDescription className="flex flex-col gap-1">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {(venue.distance_from_route_m! / 1000).toFixed(1)} km off route ·{" "}
-                      {venue.rating ?? "–"} ★
+                    <span className="flex items-center gap-2">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {formatMiles(venue.distance_from_route_m!)} off route
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5 text-accent" />
+                        {venue.rating ?? "–"}
+                      </span>
                     </span>
                     <span>
                       {venue.cloth_quality?.replaceAll("_", " ") ?? "cloth unverified"} ·{" "}
@@ -373,9 +471,9 @@ export function TripPlannerClient() {
           ))}
       </div>
 
-      {trip && venues.length === 0 && !error && (
+      {trip && venues.length === 0 && !searching && !error && (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          No venues inside this corridor — widen the detour buffer.
+          No pool rooms inside this corridor — widen the max detour.
         </p>
       )}
     </div>

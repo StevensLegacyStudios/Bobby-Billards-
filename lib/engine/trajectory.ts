@@ -165,6 +165,85 @@ export function solveBankShot(
 }
 
 /**
+ * Solve a one-rail kick: the CUE ball travels cue → cushion → object ball.
+ * Uses the mirror (equal-distance) system — reflect the target across the
+ * cushion's ball-center line and shoot straight at the reflection, which
+ * guarantees θᵢ = θᵣ at the rail. Most accurate with a rolling center-ball
+ * hit at medium speed; sidespin breaks the system.
+ */
+export function solveKickShot(
+  cue: TablePoint,
+  target: TablePoint,
+  cushion: Cushion
+): TrajectoryPayload {
+  const mirrored = reflectAcrossCushion(target, cushion);
+  const dir = sub(mirrored, cue);
+
+  const r = TABLE.ballRadius;
+  let t: number;
+  if (cushion === "top" || cushion === "bottom") {
+    const railY = cushion === "top" ? r : TABLE.height - r;
+    t = dir[1] === 0 ? -1 : (railY - cue[1]) / dir[1];
+  } else {
+    const railX = cushion === "left" ? r : TABLE.width - r;
+    t = dir[0] === 0 ? -1 : (railX - cue[0]) / dir[0];
+  }
+
+  if (t <= 0 || t >= 1) {
+    return {
+      segments: [],
+      cutAngleDeg: 0,
+      feasible: false,
+      difficulty: "very_hard",
+      notes: [`No valid ${cushion}-rail kick path from this layout.`],
+    };
+  }
+
+  const contact: TablePoint = [cue[0] + dir[0] * t, cue[1] + dir[1] * t];
+  const travel = len(sub(contact, cue)) + len(sub(target, contact));
+  const difficulty: TrajectoryPayload["difficulty"] =
+    travel < 120 ? "moderate" : travel < 220 ? "hard" : "very_hard";
+
+  return {
+    segments: [
+      { from: cue, to: contact, kind: "cue_travel" },
+      { from: contact, to: target, kind: "bank_reflection" },
+    ],
+    cutAngleDeg: 0,
+    feasible: true,
+    difficulty,
+    notes: [
+      `Mirror-system kick off the ${cushion} rail — aim at the target's reflection; contact at [${round2(contact[0])}, ${round2(contact[1])}].`,
+      "Use a rolling cue ball, center hit, medium speed. Firm speed shortens the rebound angle; sidespin breaks the mirror.",
+    ],
+  };
+}
+
+/** Try all four cushions and return the shortest feasible kick path. */
+export function solveBestKick(cue: TablePoint, target: TablePoint): TrajectoryPayload {
+  let best: TrajectoryPayload | null = null;
+  let bestLen = Number.POSITIVE_INFINITY;
+  for (const cushion of ["top", "bottom", "left", "right"] as Cushion[]) {
+    const shot = solveKickShot(cue, target, cushion);
+    if (!shot.feasible) continue;
+    const pathLen = shot.segments.reduce((sum, s) => sum + len(sub(s.to, s.from)), 0);
+    if (pathLen < bestLen) {
+      best = shot;
+      bestLen = pathLen;
+    }
+  }
+  return (
+    best ?? {
+      segments: [],
+      cutAngleDeg: 0,
+      feasible: false,
+      difficulty: "very_hard",
+      notes: ["No one-rail kick reaches the target from here."],
+    }
+  );
+}
+
+/**
  * Pick the best pocket for a layout: try every direct pocket, fall back to
  * one-rail banks, and return the lowest-difficulty feasible trajectory.
  */

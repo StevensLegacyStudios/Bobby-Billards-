@@ -1,50 +1,33 @@
 @import "tailwindcss";
 
+/*
+ * Buddy Billiards — pool-hall dark theme.
+ * The room is dark, the felt is green, the brass is warm. One theme, no
+ * light mode: pool halls don't have a light mode.
+ */
 :root {
-  --background: oklch(0.985 0.003 145);
-  --foreground: oklch(0.18 0.02 155);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 155);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 155);
-  --primary: oklch(0.42 0.11 155);
-  --primary-foreground: oklch(0.98 0.01 145);
-  --secondary: oklch(0.94 0.02 145);
-  --secondary-foreground: oklch(0.28 0.05 155);
-  --muted: oklch(0.95 0.01 145);
-  --muted-foreground: oklch(0.5 0.02 155);
-  --accent: oklch(0.85 0.15 85);
-  --accent-foreground: oklch(0.25 0.05 85);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.9 0.01 145);
-  --input: oklch(0.9 0.01 145);
-  --ring: oklch(0.42 0.11 155);
-  --radius: 0.625rem;
-}
+  color-scheme: dark;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.16 0.02 155);
-    --foreground: oklch(0.95 0.01 145);
-    --card: oklch(0.2 0.025 155);
-    --card-foreground: oklch(0.95 0.01 145);
-    --popover: oklch(0.2 0.025 155);
-    --popover-foreground: oklch(0.95 0.01 145);
-    --primary: oklch(0.72 0.14 150);
-    --primary-foreground: oklch(0.15 0.03 155);
-    --secondary: oklch(0.26 0.03 155);
-    --secondary-foreground: oklch(0.92 0.01 145);
-    --muted: oklch(0.24 0.02 155);
-    --muted-foreground: oklch(0.68 0.02 150);
-    --accent: oklch(0.8 0.14 85);
-    --accent-foreground: oklch(0.2 0.05 85);
-    --destructive: oklch(0.6 0.19 25);
-    --destructive-foreground: oklch(0.98 0 0);
-    --border: oklch(0.3 0.02 155);
-    --input: oklch(0.3 0.02 155);
-    --ring: oklch(0.72 0.14 150);
-  }
+  --background: oklch(0.145 0.012 165);
+  --foreground: oklch(0.95 0.008 145);
+  --card: oklch(0.185 0.018 163);
+  --card-foreground: oklch(0.95 0.008 145);
+  --popover: oklch(0.21 0.02 163);
+  --popover-foreground: oklch(0.95 0.008 145);
+  --primary: oklch(0.74 0.155 152);
+  --primary-foreground: oklch(0.16 0.03 155);
+  --secondary: oklch(0.25 0.025 160);
+  --secondary-foreground: oklch(0.93 0.01 145);
+  --muted: oklch(0.23 0.02 160);
+  --muted-foreground: oklch(0.68 0.015 150);
+  --accent: oklch(0.8 0.13 82);
+  --accent-foreground: oklch(0.22 0.06 82);
+  --destructive: oklch(0.62 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.29 0.02 160);
+  --input: oklch(0.31 0.02 160);
+  --ring: oklch(0.74 0.155 152);
+  --radius: 0.75rem;
 }
 
 @theme inline {
@@ -79,4 +62,46 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  /* Faint overhead-lamp pools of light, like the room the app lives in. */
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% -8%, oklch(0.32 0.06 155 / 0.5), transparent 65%),
+    radial-gradient(ellipse 45% 30% at 85% 105%, oklch(0.28 0.05 82 / 0.25), transparent 70%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: oklch(0.74 0.155 152 / 0.35);
+}
+
+/* Brass-edge hover treatment for interactive cards. */
+.table-card {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.table-card:hover {
+  transform: translateY(-2px);
+  border-color: oklch(0.74 0.155 152 / 0.6);
+  box-shadow: 0 8px 30px -12px oklch(0.74 0.155 152 / 0.35);
+}
+
+/* Leaflet dark-room fit + popup theming. */
+.leaflet-container {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background: oklch(0.17 0.015 163);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content a {
+  color: var(--primary);
+}
+.leaflet-bar a {
+  background: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+.leaflet-bar a:hover {
+  background: var(--secondary);
 }
