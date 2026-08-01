@@ -22,7 +22,7 @@ const PLANS = {
  * exercised locally: the tier cookie is set directly.
  */
 export async function POST(req: NextRequest) {
-  let body: { plan?: keyof typeof PLANS; venueId?: string };
+  let body: { plan?: keyof typeof PLANS; venueId?: string; userId?: string; email?: string };
   try {
     body = await req.json();
   } catch {
@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
 
   if (secretKey) {
     const stripe = new Stripe(secretKey);
+    // The webhook links the purchase back to the account via metadata, so it
+    // must ride on both the session (checkout.session.completed) and the
+    // subscription (customer.subscription.updated/deleted).
+    const metadata = {
+      plan,
+      ...(body.userId ? { user_id: body.userId } : {}),
+      ...(body.venueId ? { venue_id: body.venueId } : {}),
+    };
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [
@@ -48,7 +56,9 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      metadata: { plan, ...(body.venueId ? { venue_id: body.venueId } : {}) },
+      metadata,
+      subscription_data: { metadata },
+      ...(body.email ? { customer_email: body.email } : {}),
       success_url: `${origin}/upgrade?success=1`,
       cancel_url: `${origin}/upgrade?canceled=1`,
     });
