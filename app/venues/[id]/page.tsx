@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { CalendarDays, Clock, Phone, ShieldCheck, Star } from "lucide-react";
+import { CalendarDays, Clock, Navigation, Phone, ShieldCheck, Star } from "lucide-react";
 
 import BilliardCanvasLazy from "@/components/billiards/billiard-canvas-lazy";
+import { VenueMap } from "@/components/venue-map";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -98,6 +100,26 @@ export default async function VenuePage({
             </Badge>
           ))}
         </div>
+      )}
+
+      {venue.lat !== 0 && venue.lng !== 0 && (
+        <Card className="overflow-hidden p-0">
+          <VenueMap venue={venue} />
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <span className="text-sm text-muted-foreground">
+              {venue.lat.toFixed(4)}, {venue.lng.toFixed(4)}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${venue.lat},${venue.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Navigation className="h-4 w-4" /> Get directions
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

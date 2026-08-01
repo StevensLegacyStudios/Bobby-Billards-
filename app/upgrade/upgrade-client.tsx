@@ -20,12 +20,12 @@ import { PREMIUM_PRICE_USD } from "@/lib/tier";
 const FREE_FEATURES = [
   "3 AI shot uploads per month",
   "Basic text venue directories",
-  "Corridor search up to 15 km detours",
+  "Route search up to 10-mile detours",
 ];
 
 const PREMIUM_FEATURES = [
   "Unlimited AI shot uploads",
-  "Full corridor detours (up to 100 km)",
+  "Full route detours (up to 60 miles)",
   "Unlimited 3D practice layouts",
   "Pro camera modules",
   "Offline corridor & map downloads (IndexedDB sync)",

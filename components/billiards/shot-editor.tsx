@@ -43,10 +43,12 @@ export function ShotEditor({
   layout,
   trajectory,
   onChange,
+  pocketsSelectable = true,
 }: {
   layout: ShotLayout;
   trajectory: TrajectoryPayload | null;
   onChange: (next: ShotLayout) => void;
+  pocketsSelectable?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<"cue" | "target" | null>(null);
@@ -90,7 +92,7 @@ export function ShotEditor({
         {/* pockets */}
         {POCKET_KEYS.map((key) => {
           const [px, py] = POCKETS[key];
-          const selected = layout.pocket === key;
+          const selected = pocketsSelectable && layout.pocket === key;
           return (
             <circle
               key={key}
@@ -100,8 +102,8 @@ export function ShotEditor({
               fill={selected ? "#0a0a0a" : "#111827"}
               stroke={selected ? "#facc15" : "transparent"}
               strokeWidth={1.5}
-              className="cursor-pointer"
-              onClick={() => onChange({ ...layout, pocket: key })}
+              className={pocketsSelectable ? "cursor-pointer" : undefined}
+              onClick={pocketsSelectable ? () => onChange({ ...layout, pocket: key }) : undefined}
             />
           );
         })}
@@ -150,6 +152,7 @@ export function ShotEditor({
         />
       </svg>
 
+      {pocketsSelectable && (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Pocket:</span>
         <button
@@ -180,9 +183,11 @@ export function ShotEditor({
           </button>
         ))}
       </div>
+      )}
       <p className="text-xs text-muted-foreground">
-        Drag the white cue ball and red object ball to match your table, then pick a pocket
-        (or let the solver choose).
+        {pocketsSelectable
+          ? "Drag the white cue ball and red object ball to match your table, then pick a pocket (or let the solver choose)."
+          : "Drag the balls to match your table — the solver finds the kick path off the chosen rail."}
       </p>
     </div>
   );
