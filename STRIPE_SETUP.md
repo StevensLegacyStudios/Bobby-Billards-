@@ -73,3 +73,9 @@ Both are created inline by the code — no dashboard setup:
 
 Prices live in `lib/tier.ts` (`PREMIUM_PRICE_USD`, `VERIFIED_VENUE_PRICE_USD`)
 if you ever want to change them.
+
+---
+
+**Status: LIVE.** Account activated, live keys and webhook configured in Vercel
+(August 2026). To rotate keys later: create new ones in the Stripe dashboard,
+update the two Vercel env vars, redeploy.
