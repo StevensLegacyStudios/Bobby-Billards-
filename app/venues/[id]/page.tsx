@@ -40,6 +40,13 @@ async function fetchVenue(id: string): Promise<Venue | null> {
   return findDemoVenue(id) ?? null;
 }
 
+/** Fire-and-forget: log a real page view for the venue owner's analytics. */
+function logPageView(venueId: string) {
+  if (!isSupabaseConfigured) return;
+  const supabase = getSupabaseBrowserClient()!;
+  void supabase.from("venue_page_views").insert({ venue_id: venueId }).then(() => {});
+}
+
 async function fetchVenueEvents(venueId: string): Promise<VenueEvent[]> {
   if (isSupabaseConfigured) {
     const supabase = getSupabaseBrowserClient()!;
@@ -90,6 +97,7 @@ export default async function VenuePage({
   const venue = await fetchVenue(id);
   if (!venue) notFound();
 
+  logPageView(venue.id);
   const events = await fetchVenueEvents(venue.id);
   const houseShot = solveDirectShot([45, 65], [130, 42], POCKETS.top_right);
 
