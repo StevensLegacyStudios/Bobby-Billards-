@@ -8,6 +8,7 @@ import {
   Briefcase,
   CalendarPlus,
   Eye,
+  Info,
   ListPlus,
   Megaphone,
   MousePointerClick,
@@ -31,22 +32,22 @@ import { WEEKDAY_NAMES } from "@/lib/hours";
 import { VERIFIED_VENUE_PRICE_USD } from "@/lib/tier";
 import type { VenueEvent } from "@/lib/types";
 
-/** Deterministic pseudo-analytics per venue (stable across renders/SSR). */
-function analyticsFor(venueId: string) {
-  let h = 0;
-  for (const ch of venueId) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return {
-    pageViews: 1200 + (h % 4200),
-    engagement: 280 + (h % 950),
-    travelLogAdds: 35 + (h % 210),
-    weekly: Array.from({ length: 8 }, (_, i) => 40 + ((h >> i) % 60)),
-  };
-}
-
 interface OwnedVenue {
   id: string;
   name: string;
+  is_verified: boolean;
 }
+
+/** Real stats for one venue, computed from actual rows — zero when there's genuinely no traffic yet. */
+interface RealStats {
+  pageViews30d: number;
+  adClicks30d: number;
+  eventsPublished: number;
+  /** Page views bucketed into the last 8 weeks, oldest first. */
+  weekly: number[];
+}
+
+const EMPTY_STATS: RealStats = { pageViews30d: 0, adClicks30d: 0, eventsPublished: 0, weekly: [0, 0, 0, 0, 0, 0, 0, 0] };
 
 /** "Every Tuesday, 7pm" or a localized date-time. */
 function describeWhen(event: VenueEvent): string {
@@ -71,13 +72,15 @@ function describeWhen(event: VenueEvent): string {
 export function B2bDashboardClient() {
   const searchParams = useSearchParams();
   const { user, supabase, configured } = useAuth();
-  const [venueId, setVenueId] = useState(DEMO_VENUES[0].id);
+  const [demoVenueId, setDemoVenueId] = useState(DEMO_VENUES[0].id);
   const [verifyPending, setVerifyPending] = useState(false);
   const [demoVerified, setDemoVerified] = useState(searchParams.get("verified") === "demo");
 
-  // Owned venues (live mode). null = not loaded yet / not applicable.
+  // Owned venues (live mode). null = not loaded yet.
   const [ownedVenues, setOwnedVenues] = useState<OwnedVenue[] | null>(null);
   const [postVenueId, setPostVenueId] = useState<string | null>(null);
+  const [realStats, setRealStats] = useState<RealStats>(EMPTY_STATS);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // Event form state.
   const [events, setEvents] = useState<VenueEvent[]>(DEMO_EVENTS);
@@ -95,12 +98,15 @@ export function B2bDashboardClient() {
   const [posting, setPosting] = useState(false);
   const [postStatus, setPostStatus] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const venue = DEMO_VENUES.find((v) => v.id === venueId) ?? DEMO_VENUES[0];
-  const isVerified = venue.is_verified || demoVerified;
-  const stats = useMemo(() => analyticsFor(venue.id), [venue.id]);
-
   const liveMode = configured && Boolean(user);
-  const canPostLive = liveMode && (ownedVenues?.length ?? 0) > 0;
+  const hasOwnedVenues = (ownedVenues?.length ?? 0) > 0;
+  const canPostLive = liveMode && hasOwnedVenues;
+
+  // Selected venue: a real owned venue in live mode, a demo venue otherwise.
+  const selectedOwned = ownedVenues?.find((v) => v.id === postVenueId) ?? ownedVenues?.[0] ?? null;
+  const demoVenue = DEMO_VENUES.find((v) => v.id === demoVenueId) ?? DEMO_VENUES[0];
+  const venue = canPostLive && selectedOwned ? selectedOwned : demoVenue;
+  const isVerified = canPostLive && selectedOwned ? selectedOwned.is_verified : demoVenue.is_verified || demoVerified;
 
   // Load venues the signed-in user owns, plus their published events.
   useEffect(() => {
@@ -116,7 +122,7 @@ export function B2bDashboardClient() {
       }
       const { data, error } = await supabase
         .from("venues")
-        .select("id, name")
+        .select("id, name, is_verified")
         .eq("owner_id", user.id)
         .order("name");
       if (cancelled) return;
@@ -139,6 +145,59 @@ export function B2bDashboardClient() {
       cancelled = true;
     };
   }, [supabase, user]);
+
+  // Real analytics for the selected owned venue — zero, honestly, when there's no traffic yet.
+  useEffect(() => {
+    let cancelled = false;
+    if (!canPostLive || !supabase || !selectedOwned) {
+      setRealStats(EMPTY_STATS);
+      return;
+    }
+    setStatsLoading(true);
+    (async () => {
+      const now = new Date();
+      const since30d = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+      const since8w = new Date(now.getTime() - 56 * 86_400_000).toISOString();
+
+      const [{ count: pageViews30d }, { count: adClicks30d }, { data: weeklyRows }] = await Promise.all([
+        supabase
+          .from("venue_page_views")
+          .select("id", { count: "exact", head: true })
+          .eq("venue_id", selectedOwned.id)
+          .gte("viewed_at", since30d),
+        supabase
+          .from("ad_clicks")
+          .select("id", { count: "exact", head: true })
+          .eq("venue_id", selectedOwned.id)
+          .gte("clicked_at", since30d),
+        supabase
+          .from("venue_page_views")
+          .select("viewed_at")
+          .eq("venue_id", selectedOwned.id)
+          .gte("viewed_at", since8w),
+      ]);
+      if (cancelled) return;
+
+      const weekly = Array.from({ length: 8 }, () => 0);
+      for (const row of weeklyRows ?? []) {
+        const ageMs = now.getTime() - new Date((row as { viewed_at: string }).viewed_at).getTime();
+        const weekIndex = 7 - Math.min(7, Math.floor(ageMs / (7 * 86_400_000)));
+        weekly[weekIndex] += 1;
+      }
+      const maxWeek = Math.max(1, ...weekly);
+
+      setRealStats({
+        pageViews30d: pageViews30d ?? 0,
+        adClicks30d: adClicks30d ?? 0,
+        eventsPublished: liveEvents.filter((e) => e.venue_id === selectedOwned.id).length,
+        weekly: weekly.map((v) => Math.round((v / maxWeek) * 100)),
+      });
+      setStatsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canPostLive, supabase, selectedOwned, liveEvents]);
 
   const startVerification = async () => {
     setVerifyPending(true);
@@ -264,6 +323,19 @@ export function B2bDashboardClient() {
 
   const publishDisabled = posting || !formValid || (!canPostLive && !isVerified);
 
+  const stats = useMemo(
+    () =>
+      canPostLive
+        ? realStats
+        : {
+            pageViews30d: 0,
+            adClicks30d: 0,
+            eventsPublished: publishedEvents.length,
+            weekly: [0, 0, 0, 0, 0, 0, 0, 0],
+          },
+    [canPostLive, realStats, publishedEvents.length]
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -279,21 +351,66 @@ export function B2bDashboardClient() {
             .
           </p>
         </div>
-        <select
-          value={venueId}
-          onChange={(e) => {
-            setVenueId(e.target.value);
-            setDemoVerified(false);
-          }}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          {DEMO_VENUES.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
+        {canPostLive && ownedVenues ? (
+          <select
+            value={postVenueId ?? ""}
+            onChange={(e) => setPostVenueId(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {ownedVenues.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          !liveMode && (
+            <select
+              value={demoVenueId}
+              onChange={(e) => {
+                setDemoVenueId(e.target.value);
+                setDemoVerified(false);
+              }}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {DEMO_VENUES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          )
+        )}
       </div>
+
+      {!canPostLive && (
+        <Card className="border-accent/60 bg-accent/5">
+          <CardContent className="flex items-start gap-3 p-4 text-sm">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent-foreground" />
+            <div>
+              {liveMode ? (
+                <p>
+                  <strong>No real venue is linked to your account yet.</strong> Everything below
+                  (venue name, stats, published events) is illustrative demo data — it isn&apos;t
+                  tied to your account and isn&apos;t seen by real players. Venue-claiming isn&apos;t
+                  wired up in this build yet; contact support to get your room linked to your
+                  account, and this panel will switch to your real numbers automatically.
+                </p>
+              ) : (
+                <p>
+                  <strong>You&apos;re viewing demo data.</strong> Sign in to see your real venue,
+                  real page views, and real ad clicks — nothing here is tied to an account until
+                  you do.{" "}
+                  <Link href="/account" className="underline">
+                    Sign in
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Verification workflow */}
       <Card className={isVerified ? "border-primary/50" : "border-accent/70"}>
@@ -325,23 +442,27 @@ export function B2bDashboardClient() {
             <CardDescription className="flex items-center gap-1.5">
               <Eye className="h-4 w-4" /> Page views (30d)
             </CardDescription>
-            <CardTitle className="text-3xl">{stats.pageViews.toLocaleString()}</CardTitle>
+            <CardTitle className="text-3xl">
+              {statsLoading ? "…" : stats.pageViews30d.toLocaleString()}
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription className="flex items-center gap-1.5">
-              <MousePointerClick className="h-4 w-4" /> Engagement events
+              <MousePointerClick className="h-4 w-4" /> Ad clicks (30d)
             </CardDescription>
-            <CardTitle className="text-3xl">{stats.engagement.toLocaleString()}</CardTitle>
+            <CardTitle className="text-3xl">
+              {statsLoading ? "…" : stats.adClicks30d.toLocaleString()}
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription className="flex items-center gap-1.5">
-              <ListPlus className="h-4 w-4" /> Travel log additions
+              <ListPlus className="h-4 w-4" /> Events published
             </CardDescription>
-            <CardTitle className="text-3xl">{stats.travelLogAdds.toLocaleString()}</CardTitle>
+            <CardTitle className="text-3xl">{stats.eventsPublished.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -349,22 +470,32 @@ export function B2bDashboardClient() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4 text-primary" /> Weekly engagement
+            <BarChart3 className="h-4 w-4 text-primary" /> Weekly page views
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex h-28 items-end gap-2">
-            {stats.weekly.map((v, i) => (
-              <div key={i} className="flex-1">
-                <div
-                  className="w-full rounded-t bg-primary/70"
-                  style={{ height: `${v}%` }}
-                  title={`Week ${i + 1}: ${v} interactions/day avg`}
-                />
+          {canPostLive ? (
+            <>
+              <div className="flex h-28 items-end gap-2">
+                {stats.weekly.map((v, i) => (
+                  <div key={i} className="flex-1">
+                    <div
+                      className="w-full rounded-t bg-primary/70"
+                      style={{ height: `${Math.max(2, v)}%` }}
+                      title={`Week ${i + 1}`}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Last 8 weeks, daily average interactions.</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Last 8 weeks, real page views to your venue page.
+              </p>
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Real traffic charts appear here once your venue is linked to your account.
+            </p>
+          )}
         </CardContent>
       </Card>
 

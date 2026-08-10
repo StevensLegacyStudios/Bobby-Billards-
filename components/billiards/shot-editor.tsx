@@ -53,6 +53,17 @@ export function ShotEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = useState<"cue" | "target" | null>(null);
 
+  // Raw pointermove fires far faster than the screen can redraw (100+/sec on
+  // some phones) — recomputing the trajectory solver and re-rendering the 3D
+  // scene on every single event causes visible tearing/flicker while
+  // dragging. Coalesce to at most one update per animation frame.
+  const draggingRef = useRef(dragging);
+  draggingRef.current = dragging;
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const rafRef = useRef<number | null>(null);
+  const pendingPointRef = useRef<TablePoint | null>(null);
+
   const toTablePoint = useCallback((clientX: number, clientY: number): TablePoint => {
     const svg = svgRef.current!;
     const rect = svg.getBoundingClientRect();
@@ -61,16 +72,34 @@ export function ShotEditor({
     return clampPoint([x, y]);
   }, []);
 
+  const flushPendingPoint = useCallback(() => {
+    rafRef.current = null;
+    const point = pendingPointRef.current;
+    const drag = draggingRef.current;
+    if (!point || !drag) return;
+    const current = layoutRef.current;
+    onChange(drag === "cue" ? { ...current, cue: point } : { ...current, target: point });
+  }, [onChange]);
+
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!dragging) return;
-      const point = toTablePoint(e.clientX, e.clientY);
-      onChange(
-        dragging === "cue" ? { ...layout, cue: point } : { ...layout, target: point }
-      );
+      if (!draggingRef.current) return;
+      pendingPointRef.current = toTablePoint(e.clientX, e.clientY);
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(flushPendingPoint);
+      }
     },
-    [dragging, layout, onChange, toTablePoint]
+    [toTablePoint, flushPendingPoint]
   );
+
+  const stopDragging = useCallback(() => {
+    setDragging(null);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingPointRef.current = null;
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -79,8 +108,8 @@ export function ShotEditor({
         viewBox={`${-MARGIN} ${-MARGIN} ${VIEW_W + MARGIN * 2} ${VIEW_H + MARGIN * 2}`}
         className="w-full touch-none select-none rounded-lg"
         onPointerMove={onPointerMove}
-        onPointerUp={() => setDragging(null)}
-        onPointerLeave={() => setDragging(null)}
+        onPointerUp={stopDragging}
+        onPointerLeave={stopDragging}
       >
         {/* rails + slate */}
         <rect x={-MARGIN} y={-MARGIN} width={VIEW_W + MARGIN * 2} height={VIEW_H + MARGIN * 2} rx={4} fill="#78350f" />

@@ -121,7 +121,7 @@ export default async function HomePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Rooms players rate highest</h2>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/trip-planner">
+            <Link href="/tonight">
               Find rooms near you <ArrowRight />
             </Link>
           </Button>
