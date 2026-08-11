@@ -147,21 +147,28 @@ export const DRILLS: Drill[] = [
   },
 ];
 
-/** Kicking & banking systems reference — the math behind the Shot Lab solvers. */
+/**
+ * Kicking & banking systems reference. Rewritten in plain language on
+ * purpose — each one pairs with a picture (see table-diagram.tsx) instead
+ * of leaning on billiards jargon to carry the idea.
+ */
 export const SYSTEMS = [
   {
     key: "mirror",
-    name: "Mirror System (1-rail kicks & banks)",
-    body: "Reflect your target across the cushion and shoot dead at the reflection — the rail contact lands where the incident angle equals the rebound angle. This is what the Kick mode solver draws. Caveats the pros know: firm speed shortens the rebound (cushions compress), running english lengthens it, and dirty rails play short. Calibrate on your table with a medium-speed rolling ball.",
+    name: "The Mirror Trick (1-rail kicks & banks)",
+    short: "Picture your target's reflection on the other side of the rail, and shoot straight at that.",
+    body: "Imagine the rail is a mirror. Your object ball has a reflection on the far side of it, the same distance behind the rail as the real ball is in front. Aim your cue ball dead straight at that mirror-image spot. Wherever your aim line crosses the rail is exactly where the ball needs to bounce — because a rail bounces a ball the same way a mirror bounces light: the angle coming in matches the angle going out. This is exactly what the Kick mode solver draws for you. A couple of things that throw it off in real life: hitting hard makes the bounce a little shorter (the cushion squeezes), spin on the cue ball bends the bounce, and older, dirty rails grip more and play short. Try it once at medium speed with no spin to see how your table plays, then adjust.",
   },
   {
     key: "two-to-one",
-    name: "Two-to-One System",
-    body: "The table is exactly 2:1, so a ball hit at the right angle travels two diamonds along the table for every one diamond across. Going up and down the long way: aim through a point two diamonds over per diamond up. It's the fastest way to kick at balls up-table without memorizing anything.",
+    name: "The 2-for-1 Rule",
+    short: "The table is twice as long as it is wide, so every step you go up costs two steps sideways.",
+    body: "A pool table is exactly twice as long as it is wide. That means if you're aiming a ball up the length of the table, for every one \"step\" it needs to travel across, it travels two steps up. So to hit a target that's far up-table, pick the point on the rail that's twice as far over (in the direction you need) as it is up, and aim there. It sounds like math, but it's really just remembering \"two over for every one up\" — no measuring, no calculator, and it works for kicking at any ball near the top of the table from anywhere near the bottom.",
   },
   {
     key: "corner-5",
-    name: "Corner-5 (3-rail kicks, running english)",
-    body: "The classic 3-cushion system. Number your origin: shooting from the corner = 5, each diamond along the short rail adds 1, each diamond up the long rail subtracts ½. Number the third rail 1–4 from the far corner. Aim through the first-rail diamond equal to (your number − target third-rail number), with medium speed and about one tip of running english. Corner-5 says: from the corner (5), to arrive at third-rail diamond 3, aim through first-rail diamond 2. Every table plays a little long or short — calibrate the reference shot first.",
+    name: "Corner-Five (bouncing off 3 rails)",
+    short: "Start counting from the corner, hit the numbered spot on the first rail that matches your math.",
+    body: "This one's for when a ball needs to bounce off three different rails to reach its target — think billiards trick-shot territory. Here's the plain version: the corner you're shooting from is your starting number, 5. Every marked spot (\"diamond\") you move along the short rail from there adds 1 to your number; every diamond you move up the long rail subtracts a half. On the far rail — the one your ball eventually needs to land near — number the diamonds 1 through 4 starting from the corner across from you. Take your starting number, subtract the far-rail number you're trying to hit, and aim your first bounce through the diamond with that result. Example: starting at the corner (5), aiming to land near far-rail diamond 3, you'd aim your first bounce through diamond 2. Hit it with medium speed and a touch of spin in the direction of travel. Every table runs a little long or short, so test it on a shot you already know before trusting it in a game.",
   },
 ];

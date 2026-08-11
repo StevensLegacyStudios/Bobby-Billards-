@@ -147,14 +147,13 @@ export function B2bDashboardClient() {
   }, [supabase, user]);
 
   // Real analytics for the selected owned venue — zero, honestly, when there's no traffic yet.
+  // (When there's no live venue selected, `stats` below never reads `realStats` at all, so
+  // there's nothing to reset here — the initial state is already EMPTY_STATS.)
   useEffect(() => {
+    if (!canPostLive || !supabase || !selectedOwned) return;
     let cancelled = false;
-    if (!canPostLive || !supabase || !selectedOwned) {
-      setRealStats(EMPTY_STATS);
-      return;
-    }
-    setStatsLoading(true);
     (async () => {
+      setStatsLoading(true);
       const now = new Date();
       const since30d = new Date(now.getTime() - 30 * 86_400_000).toISOString();
       const since8w = new Date(now.getTime() - 56 * 86_400_000).toISOString();

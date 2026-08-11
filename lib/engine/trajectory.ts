@@ -23,6 +23,9 @@ export const POCKETS: Record<string, TablePoint> = {
 
 export type Cushion = "top" | "bottom" | "left" | "right";
 
+/** Consistent object-ball colors shared between the 2D editor and 3D canvas. */
+export const OBJECT_BALL_COLORS = ["#dc2626", "#2563eb", "#7c3aed", "#db2777", "#0d9488", "#ea580c", "#65a30d", "#0891b2"];
+
 const sub = (a: TablePoint, b: TablePoint): TablePoint => [a[0] - b[0], a[1] - b[1]];
 const len = (v: TablePoint) => Math.hypot(v[0], v[1]);
 const norm = (v: TablePoint): TablePoint => {
