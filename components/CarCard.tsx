@@ -1,4 +1,5 @@
 import type { FitResult } from "@/lib/finance/fit";
+import type { DcapInfo } from "@/lib/dcap";
 import { miles, money, pct } from "@/lib/format";
 
 function scoreColor(score: number): string {
@@ -7,7 +8,7 @@ function scoreColor(score: number): string {
   return "bg-slate-200 text-slate-700";
 }
 
-export function CarCard({ result }: { result: FitResult }) {
+export function CarCard({ result, dcap }: { result: FitResult; dcap?: DcapInfo }) {
   const { car } = result;
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -63,6 +64,30 @@ export function CarCard({ result }: { result: FitResult }) {
             <li key={i}>⚠️ {w}</li>
           ))}
         </ul>
+      )}
+
+      {dcap && (
+        <div
+          className={`mt-3 rounded-lg border p-3 text-sm ${
+            dcap.eligible ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          {dcap.eligible ? (
+            <>
+              <div className="font-semibold text-green-800">
+                🌱 DCAP: {money(dcap.grant)} grant → you pay ~{money(dcap.youPay)}
+              </div>
+              <div className="mt-0.5 text-green-700">
+                {car.fuelType === "electric" ? "EV" : "Plug-in hybrid"}, qualifies (2018+, under 75k mi).
+                {dcap.atNetworkDealer ? " Likely a DCAP-network dealer — confirm enrollment." : " Confirm this dealer is DCAP-enrolled."}
+              </div>
+            </>
+          ) : (
+            <div className="text-amber-800">
+              ⚠️ Not DCAP-eligible: {dcap.reasons.join("; ")}.
+            </div>
+          )}
+        </div>
       )}
 
       <div className="mt-4 flex items-center justify-between">

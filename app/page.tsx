@@ -5,17 +5,22 @@ import { loadProfile, saveProfile, type Profile } from "@/lib/profile";
 import type { FitResult } from "@/lib/finance/fit";
 import type { RefiProjection } from "@/lib/finance/refi";
 import type { PrivateSellerLink } from "@/lib/privateLinks";
+import type { DcapInfo } from "@/lib/dcap";
 import { ProfileForm } from "@/components/ProfileForm";
 import { CarCard } from "@/components/CarCard";
 import { MoneyPlan } from "@/components/MoneyPlan";
 import { PrivateSellerLinks } from "@/components/PrivateSellerLinks";
 import { AdvisorChat } from "@/components/AdvisorChat";
+import { DcapPanel, type DcapMeta } from "@/components/DcapPanel";
+
+type Result = FitResult & { dcap?: DcapInfo };
 
 interface SearchResponse {
-  results: FitResult[];
+  results: Result[];
   refi: RefiProjection;
   privateLinks: PrivateSellerLink[];
   provider: { name: string; live: boolean; usedFallback: boolean; error?: string };
+  dcap: DcapMeta | null;
 }
 
 export default function Home() {
@@ -23,8 +28,9 @@ export default function Home() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dcapMode, setDcapMode] = useState(false);
 
-  const search = useCallback(async (p: Profile) => {
+  const search = useCallback(async (p: Profile, dcap: boolean) => {
     setBusy(true);
     setError(null);
     saveProfile(p);
@@ -32,7 +38,7 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: p }),
+        body: JSON.stringify({ profile: p, dcap }),
       });
       if (!res.ok) throw new Error(`Search failed (${res.status})`);
       setData((await res.json()) as SearchResponse);
@@ -47,8 +53,14 @@ export default function Home() {
   useEffect(() => {
     const p = loadProfile();
     setProfile(p);
-    void search(p);
+    void search(p, false);
   }, [search]);
+
+  function toggleDcap() {
+    const next = !dcapMode;
+    setDcapMode(next);
+    void search(profile, next);
+  }
 
   const affordable = data?.results.filter((r) => r.canAfford) ?? [];
   const stretch = data?.results.filter((r) => !r.canAfford) ?? [];
@@ -65,13 +77,25 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">
-          CarMan <span className="text-brand">AI</span>
-        </h1>
-        <p className="mt-1 text-slate-600">
-          Your personal car finder — real cars you can actually get, with the financing math done for you.
-        </p>
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            CarMan <span className="text-brand">AI</span>
+          </h1>
+          <p className="mt-1 text-slate-600">
+            Your personal car finder — real cars you can actually get, with the financing math done for you.
+          </p>
+        </div>
+        <button
+          onClick={toggleDcap}
+          className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+            dcapMode
+              ? "border-green-600 bg-green-600 text-white"
+              : "border-green-300 bg-white text-green-700 hover:bg-green-50"
+          }`}
+        >
+          {dcapMode ? "🌱 DCAP mode: ON" : "🌱 DCAP mode: off"}
+        </button>
       </header>
 
       {data && !data.provider.live && (
@@ -84,9 +108,15 @@ export default function Home() {
 
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <div className="space-y-6">
-          <ProfileForm profile={profile} onChange={setProfile} onSearch={() => void search(profile)} busy={busy} />
-          {data && <MoneyPlan refi={data.refi} />}
-          {data && <PrivateSellerLinks links={data.privateLinks} />}
+          <ProfileForm
+            profile={profile}
+            onChange={setProfile}
+            onSearch={() => void search(profile, dcapMode)}
+            busy={busy}
+          />
+          {data?.dcap && <DcapPanel meta={data.dcap} />}
+          {data && !dcapMode && <MoneyPlan refi={data.refi} />}
+          {data && !dcapMode && <PrivateSellerLinks links={data.privateLinks} />}
         </div>
 
         <div className="space-y-6">
@@ -101,11 +131,12 @@ export default function Home() {
           {affordable.length > 0 && (
             <section>
               <h2 className="mb-3 text-xl font-semibold">
-                Cars you can get <span className="text-sm font-normal text-slate-500">({affordable.length})</span>
+                {dcapMode ? "DCAP-eligible cars you can get" : "Cars you can get"}{" "}
+                <span className="text-sm font-normal text-slate-500">({affordable.length})</span>
               </h2>
               <div className="space-y-4">
                 {affordable.map((r) => (
-                  <CarCard key={r.car.id} result={r} />
+                  <CarCard key={r.car.id} result={r} dcap={r.dcap} />
                 ))}
               </div>
             </section>
@@ -114,25 +145,33 @@ export default function Home() {
           {stretch.length > 0 && (
             <section>
               <h2 className="mb-3 text-xl font-semibold text-slate-500">
-                Just out of reach <span className="text-sm font-normal">(need more down or a co-signer)</span>
+                {dcapMode ? "Also eligible (a bit more cash)" : "Just out of reach"}{" "}
+                <span className="text-sm font-normal">
+                  {dcapMode ? "" : "(need more down or a co-signer)"}
+                </span>
               </h2>
               <div className="space-y-4 opacity-90">
                 {stretch.map((r) => (
-                  <CarCard key={r.car.id} result={r} />
+                  <CarCard key={r.car.id} result={r} dcap={r.dcap} />
                 ))}
               </div>
             </section>
           )}
 
           {data && affordable.length === 0 && stretch.length === 0 && (
-            <p className="text-slate-500">No matches. Try widening your radius, price, or fuel/body filters.</p>
+            <p className="text-slate-500">
+              {dcapMode
+                ? "No DCAP-eligible EV/PHEVs matched. Widen your radius, or call the dealers listed to check their lots."
+                : "No matches. Try widening your radius, price, or fuel/body filters."}
+            </p>
           )}
         </div>
       </div>
 
       <footer className="mt-12 border-t border-slate-200 pt-6 text-xs text-slate-400">
-        CarMan AI gives estimates, not financial advice. Rates and inventory are illustrative until live
-        API keys are configured. Always verify terms with the lender and inspect any used car before buying.
+        CarMan AI gives estimates, not financial advice. Rates, inventory, and DCAP grant amounts are
+        illustrative until live API keys are configured — always confirm eligibility with your DCAP
+        caseworker, verify terms with the dealer, and inspect any used car before buying.
       </footer>
     </main>
   );
