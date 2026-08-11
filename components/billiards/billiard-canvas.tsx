@@ -5,7 +5,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
-import { TABLE, POCKETS } from "@/lib/engine/trajectory";
+import { TABLE, POCKETS, OBJECT_BALL_COLORS } from "@/lib/engine/trajectory";
 import type { TablePoint, TrajectoryPayload, TrajectorySegment } from "@/lib/types";
 
 /**
@@ -130,52 +130,84 @@ function Ball({
   );
 }
 
-/** A marker sphere that repeatedly runs the full trajectory path. */
-function ShotRunner({ path }: { path: [number, number, number][] }) {
+/**
+ * A ball mesh that sits statically at `point` until `token` changes, then
+ * travels `path` (a polyline of table points) once, at constant speed, and
+ * holds at the final position — this is what the "Shoot" button drives.
+ * Position updates go straight to the mesh ref (not React state) so the
+ * ~1s animation never triggers a re-render of the surrounding scene.
+ */
+function AnimatedBall({
+  point,
+  path,
+  token,
+  duration = 0.6,
+  delay = 0,
+  color,
+}: {
+  point: TablePoint;
+  path?: TablePoint[] | null;
+  token: number;
+  duration?: number;
+  delay?: number;
+  color: string;
+}) {
   const ref = useRef<THREE.Mesh>(null);
-  const { points, lengths, total } = useMemo(() => {
-    const pts = path.map((p) => new THREE.Vector3(...p));
+  const prevToken = useRef(token);
+  const startRef = useRef<number | null>(null);
+  const worldPath = useMemo(
+    () => (path && path.length >= 2 ? path.map((p) => new THREE.Vector3(...toWorld(p))) : null),
+    [path]
+  );
+  const { segLens, total } = useMemo(() => {
+    if (!worldPath) return { segLens: [] as number[], total: 0 };
     const lens: number[] = [];
     let sum = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const l = pts[i].distanceTo(pts[i + 1]);
+    for (let i = 0; i < worldPath.length - 1; i++) {
+      const l = worldPath[i].distanceTo(worldPath[i + 1]);
       lens.push(l);
       sum += l;
     }
-    return { points: pts, lengths: lens, total: sum };
-  }, [path]);
+    return { segLens: lens, total: sum };
+  }, [worldPath]);
 
   useFrame(({ clock }) => {
-    if (!ref.current || total === 0) return;
-    const speed = 1.2; // world units per second
-    let d = (clock.getElapsedTime() * speed) % total;
-    for (let i = 0; i < lengths.length; i++) {
-      if (d <= lengths[i]) {
-        ref.current.position.lerpVectors(points[i], points[i + 1], d / lengths[i]);
+    if (!ref.current) return;
+    if (token !== prevToken.current) {
+      prevToken.current = token;
+      startRef.current = clock.getElapsedTime();
+    }
+    if (!worldPath || startRef.current === null) {
+      ref.current.position.set(...toWorld(point));
+      return;
+    }
+    const elapsed = clock.getElapsedTime() - startRef.current - delay;
+    if (elapsed <= 0) {
+      ref.current.position.copy(worldPath[0]);
+      return;
+    }
+    const t = Math.min(1, elapsed / duration);
+    let d = t * total;
+    for (let i = 0; i < segLens.length; i++) {
+      const isLast = i === segLens.length - 1;
+      if (d <= segLens[i] || isLast) {
+        const segT = segLens[i] === 0 ? 1 : Math.min(1, d / segLens[i]);
+        ref.current.position.lerpVectors(worldPath[i], worldPath[i + 1], segT);
         return;
       }
-      d -= lengths[i];
+      d -= segLens[i];
     }
   });
 
-  if (points.length < 2) return null;
   return (
-    <mesh ref={ref}>
-      <sphereGeometry args={[BALL_R * 0.7, 16, 16]} />
-      <meshStandardMaterial color="#fefce8" emissive="#facc15" emissiveIntensity={0.7} />
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[BALL_R, 24, 24]} />
+      <meshStandardMaterial color={color} roughness={0.15} metalness={0.05} />
     </mesh>
   );
 }
 
 function TrajectoryLines({ trajectory }: { trajectory: TrajectoryPayload }) {
-  const runnerPath = useMemo(() => {
-    const travel = trajectory.segments.filter((s) => s.kind !== "ghost_aim");
-    if (travel.length === 0) return [];
-    const pts: [number, number, number][] = [toWorld(travel[0].from)];
-    for (const seg of travel) pts.push(toWorld(seg.to));
-    return pts;
-  }, [trajectory]);
-
   return (
     <group>
       {trajectory.segments.map((seg, i) => {
@@ -191,26 +223,37 @@ function TrajectoryLines({ trajectory }: { trajectory: TrajectoryPayload }) {
           />
         );
       })}
-      <ShotRunner path={runnerPath} />
     </group>
   );
+}
+
+/** A triggered one-shot animation: cue ball travels `cuePath`, and if the
+ * shot pockets or banks a ball, `objectPath` moves the active object ball.
+ * Bump `token` (e.g. an incrementing counter) to replay. */
+export interface ShotAnimation {
+  cuePath: TablePoint[];
+  objectPath: TablePoint[] | null;
+  token: number;
 }
 
 export interface BilliardCanvasProps {
   cue?: TablePoint;
   objects?: TablePoint[];
+  /** Index into `objects` the current trajectory/shot targets. */
+  activeIndex?: number;
   trajectory?: TrajectoryPayload | null;
+  shot?: ShotAnimation;
   className?: string;
 }
 
 export default function BilliardCanvas({
   cue = [50, 50],
   objects = [[140, 40]],
+  activeIndex = 0,
   trajectory = null,
+  shot,
   className,
 }: BilliardCanvasProps) {
-  const objectColors = ["#dc2626", "#2563eb", "#7c3aed", "#db2777", "#0d9488"];
-
   return (
     <div className={className ?? "h-[340px] w-full sm:h-[420px]"}>
       <Canvas
@@ -228,10 +271,28 @@ export default function BilliardCanvas({
         <Cushions />
         <Pockets />
 
-        <Ball point={cue} color="#fafafa" label="cue" />
-        {objects.map((p, i) => (
-          <Ball key={i} point={p} color={objectColors[i % objectColors.length]} />
-        ))}
+        <AnimatedBall
+          point={cue}
+          path={shot?.cuePath}
+          token={shot?.token ?? 0}
+          duration={0.55}
+          color="#fafafa"
+        />
+        {objects.map((p, i) =>
+          i === activeIndex && shot?.objectPath ? (
+            <AnimatedBall
+              key={i}
+              point={p}
+              path={shot.objectPath}
+              token={shot.token}
+              duration={0.5}
+              delay={0.4}
+              color={OBJECT_BALL_COLORS[i % OBJECT_BALL_COLORS.length]}
+            />
+          ) : (
+            <Ball key={i} point={p} color={OBJECT_BALL_COLORS[i % OBJECT_BALL_COLORS.length]} />
+          )
+        )}
 
         {trajectory && trajectory.segments.length > 0 && (
           <TrajectoryLines trajectory={trajectory} />

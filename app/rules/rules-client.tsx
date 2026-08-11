@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
   Dumbbell,
   Link2,
   Loader2,
+  PlayCircle,
   Sparkles,
   Trash2,
   TrendingUp,
@@ -18,6 +19,7 @@ import {
 
 import BilliardCanvasLazy from "@/components/billiards/billiard-canvas-lazy";
 import { ShotEditor, type ShotLayout } from "@/components/billiards/shot-editor";
+import { DrillDiagram, MirrorSystemDiagram, TwoToOneSystemDiagram, CornerFiveSystemDiagram } from "@/components/billiards/table-diagram";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,30 +44,49 @@ type ShotMode = "pocket" | "kick";
 type EditorState = ShotLayout & { bank?: Cushion };
 
 const PRESETS: { name: string; state: EditorState; mode?: ShotMode; kickRail?: Cushion | "best" }[] = [
-  { name: "Straight in", state: { cue: [56, 90], target: [120, 50], pocket: "top_right" } },
-  { name: "Thin cut, corner", state: { cue: [50, 80], target: [150, 30], pocket: "top_right" } },
-  { name: "Side pocket cut", state: { cue: [30, 30], target: [95, 60], pocket: "bottom_mid" } },
+  { name: "Straight in", state: { cue: [56, 90], objects: [[120, 50]], activeBall: 0, pocket: "top_right" } },
+  { name: "Thin cut, corner", state: { cue: [50, 80], objects: [[150, 30]], activeBall: 0, pocket: "top_right" } },
+  { name: "Side pocket cut", state: { cue: [30, 30], objects: [[95, 60]], activeBall: 0, pocket: "bottom_mid" } },
   {
     name: "One-rail bank",
-    state: { cue: [150, 20], target: [110, 60], pocket: "top_left", bank: "bottom" },
+    state: { cue: [150, 20], objects: [[110, 60]], activeBall: 0, pocket: "top_left", bank: "bottom" },
   },
   {
     name: "Kick at the 8",
-    state: { cue: [40, 80], target: [160, 75], pocket: "best" },
+    state: { cue: [40, 80], objects: [[160, 75]], activeBall: 0, pocket: "best" },
     mode: "kick",
     kickRail: "best",
   },
-  { name: "Solver's choice", state: { cue: [25, 75], target: [170, 25], pocket: "best" } },
+  {
+    name: "Three balls up",
+    state: {
+      cue: [40, 65],
+      objects: [
+        [120, 30],
+        [140, 70],
+        [170, 50],
+      ],
+      activeBall: 0,
+      pocket: "best",
+    },
+  },
+  { name: "Solver's choice", state: { cue: [25, 75], objects: [[170, 25]], activeBall: 0, pocket: "best" } },
 ];
 
 const CUSHIONS: (Cushion | "best")[] = ["best", "top", "bottom", "left", "right"];
+
+const SYSTEM_DIAGRAMS: Record<string, () => ReactElement> = {
+  mirror: MirrorSystemDiagram,
+  "two-to-one": TwoToOneSystemDiagram,
+  "corner-5": CornerFiveSystemDiagram,
+};
 
 function encodeShot(state: EditorState): string {
   const payload = JSON.stringify([
     Math.round(state.cue[0] * 10) / 10,
     Math.round(state.cue[1] * 10) / 10,
-    Math.round(state.target[0] * 10) / 10,
-    Math.round(state.target[1] * 10) / 10,
+    state.objects.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
+    state.activeBall,
     state.pocket,
   ]);
   return btoa(payload).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -73,18 +94,46 @@ function encodeShot(state: EditorState): string {
 
 function decodeShot(encoded: string): EditorState | null {
   try {
-    const [cx, cy, tx, ty, pocket] = JSON.parse(
+    const [cx, cy, objects, activeBall, pocket] = JSON.parse(
       atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))
     );
-    if (typeof cx !== "number" || typeof tx !== "number") return null;
+    if (typeof cx !== "number" || !Array.isArray(objects) || objects.length === 0) return null;
     return {
       cue: [cx, cy] as TablePoint,
-      target: [tx, ty] as TablePoint,
+      objects: objects as TablePoint[],
+      activeBall: typeof activeBall === "number" && activeBall < objects.length ? activeBall : 0,
       pocket: pocket === "best" || pocket in POCKETS ? pocket : "best",
     };
   } catch {
     return null;
   }
+}
+
+/** Cue-ball and object-ball travel paths for the "Shoot" animation, derived
+ * from the solved trajectory. Segment `kind`s mean different balls depending
+ * on shot mode: in kick mode every segment is the cue ball; in pocket mode
+ * `cue_travel` is the cue ball and `object_travel`/`bank_reflection` are the
+ * object ball's path to the pocket. */
+function buildShotPaths(
+  trajectory: TrajectoryPayload,
+  mode: ShotMode
+): { cuePath: TablePoint[]; objectPath: TablePoint[] | null } {
+  if (!trajectory.feasible || trajectory.segments.length === 0) {
+    return { cuePath: [], objectPath: null };
+  }
+  if (mode === "kick") {
+    const pts: TablePoint[] = [trajectory.segments[0].from];
+    for (const seg of trajectory.segments) pts.push(seg.to);
+    return { cuePath: pts, objectPath: null };
+  }
+  const cueSeg = trajectory.segments.find((s) => s.kind === "cue_travel");
+  const cuePath: TablePoint[] = cueSeg ? [cueSeg.from, cueSeg.to] : [];
+  const objectSegs = trajectory.segments.filter(
+    (s) => s.kind === "object_travel" || s.kind === "bank_reflection"
+  );
+  const objectPath: TablePoint[] =
+    objectSegs.length > 0 ? [objectSegs[0].from, ...objectSegs.map((s) => s.to)] : [];
+  return { cuePath, objectPath: objectPath.length >= 2 ? objectPath : null };
 }
 
 /** Downscale a photo to ≤1280px long edge and return base64 JPEG. */
@@ -425,18 +474,24 @@ function ShotLabInner() {
     }
   }
 
+  const target = editor.objects[editor.activeBall] ?? editor.objects[0];
+
   const solved = useMemo(() => {
     if (mode === "kick") {
       return kickRail === "best"
-        ? solveBestKick(editor.cue, editor.target)
-        : solveKickShot(editor.cue, editor.target, kickRail);
+        ? solveBestKick(editor.cue, target)
+        : solveKickShot(editor.cue, target, kickRail);
     }
     if (editor.bank) {
-      return solveBankShot(editor.cue, editor.target, POCKETS[editor.pocket as string], editor.bank);
+      return solveBankShot(editor.cue, target, POCKETS[editor.pocket as string], editor.bank);
     }
-    if (editor.pocket === "best") return solveBestShot(editor.cue, editor.target);
-    return solveDirectShot(editor.cue, editor.target, POCKETS[editor.pocket]);
-  }, [editor, mode, kickRail]);
+    if (editor.pocket === "best") return solveBestShot(editor.cue, target);
+    return solveDirectShot(editor.cue, target, POCKETS[editor.pocket]);
+  }, [editor, target, mode, kickRail]);
+
+  // Bumped to replay the "Shoot" animation on the 3D canvas.
+  const [shotToken, setShotToken] = useState(0);
+  const shotPaths = useMemo(() => buildShotPaths(solved, mode), [solved, mode]);
 
   const updateEditor = useCallback((next: ShotLayout) => {
     setEditor((prev) => ({ ...next, bank: prev.bank && next.pocket === prev.pocket ? prev.bank : undefined }));
@@ -482,21 +537,25 @@ function ShotLabInner() {
         return;
       }
       setAiResult(data);
+      // Feed the read straight into the editable layout — this is the whole
+      // point of the photo read: it should set up the table, not just
+      // display a read-only report next to it.
+      const cuePoint = data.detections.find((d: CvDetection) => d.label === "cue_ball")?.tablePoint;
+      const objectPoints = data.detections
+        .filter((d: CvDetection) => d.label === "object_ball")
+        .map((d: CvDetection) => d.tablePoint!)
+        .filter(Boolean);
+      if (cuePoint && objectPoints.length > 0) {
+        setEditor({ cue: cuePoint, objects: objectPoints, activeBall: 0, pocket: "best" });
+        setMode("pocket");
+        setActivePreset(null);
+      }
     } catch {
       setAiError({ message: "Couldn't process that photo — try a different one." });
     } finally {
       setAnalyzing(false);
     }
   }, []);
-
-  // When the AI has produced a table read, render it instead of the editor layout.
-  const activeCue = aiResult
-    ? aiResult.detections.find((d) => d.label === "cue_ball")?.tablePoint ?? editor.cue
-    : editor.cue;
-  const activeObjects = aiResult
-    ? aiResult.detections.filter((d) => d.label === "object_ball").map((d) => d.tablePoint!)
-    : [editor.target];
-  const activeTrajectory = aiResult ? aiResult.trajectory : solved;
 
   const drill = DRILLS.find((d) => d.key === drillKey) ?? DRILLS[0];
 
@@ -651,10 +710,25 @@ function ShotLabInner() {
             </Card>
 
             <Card className="overflow-hidden">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 pb-0">
+                <div>
+                  <CardTitle className="text-base">The whole shot</CardTitle>
+                  <CardDescription>Orbit to check it, then watch it run.</CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => setShotToken((t) => t + 1)}
+                  disabled={!solved.feasible || shotPaths.cuePath.length === 0}
+                >
+                  <PlayCircle /> Shoot
+                </Button>
+              </CardHeader>
               <BilliardCanvasLazy
-                cue={activeCue}
-                objects={activeObjects}
-                trajectory={activeTrajectory}
+                cue={editor.cue}
+                objects={editor.objects}
+                activeIndex={editor.activeBall}
+                trajectory={solved}
+                shot={{ cuePath: shotPaths.cuePath, objectPath: shotPaths.objectPath, token: shotToken }}
                 className="h-full min-h-[340px] w-full"
               />
             </Card>
@@ -664,19 +738,22 @@ function ShotLabInner() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">The solve</CardTitle>
-                <CardDescription>What the solver computed for this layout.</CardDescription>
+                <CardDescription>
+                  What the solver computed for ball {editor.activeBall + 1}
+                  {editor.objects.length > 1 ? ` of ${editor.objects.length}` : ""}.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant={activeTrajectory.feasible ? "default" : "destructive"}>
-                    {activeTrajectory.feasible ? "Makeable" : "Not on"}
+                  <Badge variant={solved.feasible ? "default" : "destructive"}>
+                    {solved.feasible ? "Makeable" : "Not on"}
                   </Badge>
                   {mode === "pocket" && (
-                    <Badge variant="secondary">cut angle {activeTrajectory.cutAngleDeg}°</Badge>
+                    <Badge variant="secondary">cut angle {solved.cutAngleDeg}°</Badge>
                   )}
-                  <Badge variant="outline">{activeTrajectory.difficulty.replaceAll("_", " ")}</Badge>
+                  <Badge variant="outline">{solved.difficulty.replaceAll("_", " ")}</Badge>
                 </div>
-                {activeTrajectory.notes.map((note, i) => (
+                {solved.notes.map((note, i) => (
                   <p key={i} className="text-sm text-muted-foreground">
                     {note}
                   </p>
@@ -690,7 +767,7 @@ function ShotLabInner() {
                   <Sparkles className="h-4 w-4 text-primary" /> AI table read
                 </CardTitle>
                 <CardDescription>
-                  Snap your real table and the vision model maps every ball onto the canvas.
+                  Snap your real table and every ball gets dropped straight into the editor above.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -719,9 +796,9 @@ function ShotLabInner() {
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No photo analyzed yet. Stand over the table, get the cue ball and your
-                    problem balls in frame, and hit “Photo → table read.” Free tier includes 3
-                    reads a month.
+                    No photo analyzed yet. Stand over the table, get the cue ball and every object
+                    ball in frame, and hit “Photo → table read.” The cue and objects above will
+                    snap to what the camera sees. Free tier includes 3 reads a month.
                   </p>
                 )}
               </CardContent>
@@ -750,31 +827,56 @@ function ShotLabInner() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="overflow-hidden">
-              <BilliardCanvasLazy
-                cue={drill.layout.cue}
-                objects={drill.layout.objects}
-                trajectory={null}
-                className="h-full min-h-[340px] w-full"
-              />
-            </Card>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+              <Card className="overflow-hidden">
+                <BilliardCanvasLazy
+                  cue={drill.layout.cue}
+                  objects={drill.layout.objects}
+                  trajectory={null}
+                  className="h-full min-h-[280px] w-full"
+                />
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Setup at a glance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DrillDiagram cue={drill.layout.cue} objects={drill.layout.objects} />
+                </CardContent>
+              </Card>
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">{drill.name}</CardTitle>
                 <CardDescription>{drill.tagline}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
-                <div>
-                  <p className="mb-1 font-semibold text-foreground">Setup</p>
-                  <p className="text-muted-foreground">{drill.setup}</p>
+                <div className="flex gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                    1
+                  </span>
+                  <div>
+                    <p className="mb-1 font-semibold text-foreground">Setup</p>
+                    <p className="text-muted-foreground">{drill.setup}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="mb-1 font-semibold text-foreground">Goal</p>
-                  <p className="text-muted-foreground">{drill.goal}</p>
+                <div className="flex gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                    2
+                  </span>
+                  <div>
+                    <p className="mb-1 font-semibold text-foreground">Goal</p>
+                    <p className="text-muted-foreground">{drill.goal}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="mb-1 font-semibold text-foreground">Scoring</p>
-                  <p className="text-muted-foreground">{drill.scoring}</p>
+                <div className="flex gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                    3
+                  </span>
+                  <div>
+                    <p className="mb-1 font-semibold text-foreground">Scoring</p>
+                    <p className="text-muted-foreground">{drill.scoring}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -790,15 +892,17 @@ function ShotLabInner() {
             <Card key={s.key}>
               <CardHeader>
                 <CardTitle className="text-base">{s.name}</CardTitle>
+                <CardDescription>{s.short}</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr] lg:items-start">
+                {SYSTEM_DIAGRAMS[s.key]?.()}
                 <p className="text-sm leading-relaxed text-muted-foreground">{s.body}</p>
               </CardContent>
             </Card>
           ))}
           <p className="text-xs text-muted-foreground">
             Try them live: switch to the Shot editor tab and pick “Kick (cue → rail → ball)” —
-            the solver draws the mirror-system path for any layout you drag out.
+            the solver draws the same mirror-system path for any layout you drag out.
           </p>
         </div>
       )}
