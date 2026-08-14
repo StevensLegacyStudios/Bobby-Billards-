@@ -709,7 +709,7 @@ function ShotLabInner() {
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden lg:self-start">
               <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 pb-0">
                 <div>
                   <CardTitle className="text-base">The whole shot</CardTitle>
@@ -723,13 +723,17 @@ function ShotLabInner() {
                   <PlayCircle /> Shoot
                 </Button>
               </CardHeader>
+              {/* Fixed height, not h-full: this card sits in a grid next to the
+                  editor, whose height grows with the number of object balls.
+                  Stretching the 3D canvas to match would push the camera's
+                  framed table mostly out of view below the fold. */}
               <BilliardCanvasLazy
                 cue={editor.cue}
                 objects={editor.objects}
                 activeIndex={editor.activeBall}
                 trajectory={solved}
                 shot={{ cuePath: shotPaths.cuePath, objectPath: shotPaths.objectPath, token: shotToken }}
-                className="h-full min-h-[340px] w-full"
+                className="h-[340px] w-full sm:h-[420px]"
               />
             </Card>
           </div>
