@@ -89,6 +89,7 @@ function Num({ label, value, onChange }: { label: string; value: number; onChang
         type="number"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        onFocus={(e) => e.target.select()}
         className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-brand focus:outline-none"
       />
     </label>

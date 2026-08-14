@@ -1,6 +1,6 @@
 // User profile: the constraints CarMan uses to find cars you can actually get.
 
-export type FuelType = "gas" | "hybrid" | "phev" | "electric";
+export type FuelType = "gas" | "hybrid" | "phev" | "electric" | "hydrogen";
 export type BodyStyle = "sedan" | "suv" | "hatchback" | "minivan" | "truck" | "coupe" | "wagon";
 export type CreditTier = "excellent" | "good" | "fair" | "subprime" | "deep-subprime";
 

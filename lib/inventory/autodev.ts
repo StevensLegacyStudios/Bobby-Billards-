@@ -47,10 +47,16 @@ function toStr(v: unknown): string | undefined {
 function normalizeFuel(v: unknown): FuelType | undefined {
   if (typeof v !== "string") return undefined;
   const s = v.toLowerCase();
+  // Check hydrogen/fuel-cell FIRST: labels like "Fuel Cell Electric Vehicle"
+  // (e.g. Toyota Mirai) contain the word "electric" and were previously
+  // misclassified as a battery EV, wrongly making them DCAP-"eligible".
+  if (s.includes("hydrogen") || s.includes("fuel cell") || s.includes("fcev")) return "hydrogen";
   if (s.includes("plug")) return "phev";
-  if (s.includes("electric") || s === "ev" || s === "bev") return "electric";
+  // Check hybrid before bare "electric": labels like "Hybrid Electric
+  // Vehicle" / "HEV" contain "electric" too but are NOT plug-in/battery EVs.
   if (s.includes("hybrid")) return "hybrid";
-  if (s.includes("gas") || s.includes("petrol") || s.includes("flex")) return "gas";
+  if (s.includes("electric") || s === "ev" || s === "bev") return "electric";
+  if (s.includes("gas") || s.includes("petrol") || s.includes("flex") || s.includes("diesel")) return "gas";
   return undefined;
 }
 
@@ -143,7 +149,13 @@ export class AutoDevProvider implements InventoryProvider {
       if (query.minYear && c.year < query.minYear) return false;
       if (query.maxMileage && c.mileage > query.maxMileage) return false;
       if (query.minMpg && c.mpg != null && c.mpg < query.minMpg) return false;
-      if (query.fuelTypes?.length && c.fuelType && !query.fuelTypes.includes(c.fuelType)) return false;
+      // When a fuel filter is requested, require a KNOWN, matching fuel type.
+      // (Previously an unclassified fuel type silently passed the filter,
+      // which is wrong for DCAP mode: an unknown-fuel car should never be
+      // shown as grant-eligible.)
+      if (query.fuelTypes?.length) {
+        if (!c.fuelType || !query.fuelTypes.includes(c.fuelType)) return false;
+      }
       return true;
     });
   }

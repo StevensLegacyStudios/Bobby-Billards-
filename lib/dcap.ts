@@ -12,8 +12,14 @@ export const DCAP_MAX_MILEAGE = 75_000;
 export const DCAP_PRICE_CAP = 45_000;
 export const DCAP_GRANT_EV = 7_500;
 export const DCAP_GRANT_PHEV = 7_000;
-/** Default upper price shown in DCAP mode (user is targeting a cheap car). */
-export const DCAP_DEFAULT_MAX_PRICE = 13_000;
+/**
+ * Default sticker-price ceiling for DCAP searches. This is NOT the buyer's
+ * target out-of-pocket cost — the grant ($7,000-7,500) comes off the sticker
+ * price afterward, so the search ceiling needs headroom above the target
+ * out-of-pocket price or it misses cars that are genuinely affordable once
+ * the grant is applied. Per-car "you pay" math is still computed and shown.
+ */
+export const DCAP_DEFAULT_MAX_PRICE = 20_000;
 
 export function grantFor(fuel: FuelType | undefined): number {
   if (fuel === "electric") return DCAP_GRANT_EV;
