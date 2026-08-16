@@ -16,6 +16,12 @@ export interface TripMapProps {
   origin?: { name: string; lngLat: LngLat };
   destination?: { name: string; lngLat: LngLat };
   className?: string;
+  /** Every candidate route, so a rider can compare them before picking one. */
+  alternateRoutes?: LngLat[][];
+  /** Index into `alternateRoutes` currently active — drawn bold; the rest are dimmed. */
+  selectedRouteIndex?: number;
+  /** Clicking a dimmed route on the map selects it, same as the picker cards. */
+  onSelectRoute?: (index: number) => void;
 }
 
 /**
@@ -30,6 +36,9 @@ export default function TripMap({
   origin,
   destination,
   className,
+  alternateRoutes,
+  selectedRouteIndex = 0,
+  onSelectRoute,
 }: TripMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -75,7 +84,22 @@ export default function TripMap({
           interactive: false,
         }).addTo(layers);
 
-        L.polyline(route.map(toLatLng), {
+        const routes = alternateRoutes && alternateRoutes.length > 1 ? alternateRoutes : [route];
+        // Draw dimmed alternates first so the selected route always sits on top.
+        routes.forEach((candidate, i) => {
+          if (i === selectedRouteIndex || candidate.length < 2) return;
+          L.polyline(candidate.map(toLatLng), {
+            color: "#94a3b8",
+            weight: 3,
+            opacity: 0.55,
+            dashArray: "6 6",
+          })
+            .addTo(layers)
+            .on("click", () => onSelectRoute?.(i))
+            .bindTooltip("Tap to pick this route", { sticky: true });
+        });
+
+        L.polyline((routes[selectedRouteIndex] ?? route).map(toLatLng), {
           color: "#fbbf24",
           weight: 3.5,
           opacity: 0.9,
@@ -126,7 +150,7 @@ export default function TripMap({
       }
 
       const fitPoints: [number, number][] = [
-        ...route.map(toLatLng),
+        ...(alternateRoutes && alternateRoutes.length > 1 ? alternateRoutes.flat() : route).map(toLatLng),
         ...venues.map((v) => [v.lat, v.lng] as [number, number]),
       ];
       if (fitPoints.length > 0) {
@@ -143,7 +167,7 @@ export default function TripMap({
     return () => {
       cancelled = true;
     };
-  }, [route, bufferMeters, venues, origin, destination]);
+  }, [route, bufferMeters, venues, origin, destination, alternateRoutes, selectedRouteIndex, onSelectRoute]);
 
   useEffect(
     () => () => {

@@ -29,11 +29,17 @@ import { useTier } from "@/hooks/use-tier";
 import { DEMO_CAMPAIGNS, DEMO_VENUES } from "@/lib/demo-data";
 import { distanceToPolylineMeters, toWktLineString, type LngLat } from "@/lib/geo";
 import { geocodeCity, searchPlaces, type GeocodedPlace } from "@/lib/geocode";
-import { fetchDrivingRoute } from "@/lib/routing";
+import { fetchDrivingRoutes, type DrivingRoute } from "@/lib/routing";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { decodeTripId, encodeTripId } from "@/lib/trips";
+import { cn } from "@/lib/utils";
 import { formatDriveTime, formatMiles, milesToMeters } from "@/lib/units";
 import type { Trip, Venue } from "@/lib/types";
+
+interface RouteOption {
+  route: DrivingRoute;
+  venues: Venue[];
+}
 
 const TripMap = dynamic(() => import("@/components/trip-map"), {
   ssr: false,
@@ -139,36 +145,53 @@ export function TripPlannerClient() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [drive, setDrive] = useState<{ distanceMeters: number; durationSeconds: number; isRoadRoute: boolean } | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
+  const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState(0);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [adNotice, setAdNotice] = useState<string | null>(null);
 
-  const runCorridorQuery = useCallback(async (activeTrip: Trip) => {
-    setSearching(true);
-    try {
+  /** Pool rooms inside `bufferMeters` of a route — real PostGIS query, or the client-side demo fallback. */
+  const queryCorridorVenues = useCallback(
+    async (polyline: LngLat[], bufferMeters: number): Promise<Venue[]> => {
       const supabase = getSupabaseBrowserClient();
       if (supabase) {
         const { data, error: rpcError } = await supabase.rpc("get_venues_in_corridor", {
-          route_polyline: toWktLineString(activeTrip.polyline),
-          buffer_meters: activeTrip.buffer_meters,
+          route_polyline: toWktLineString(polyline),
+          buffer_meters: bufferMeters,
         });
-        if (!rpcError && data) {
-          setVenues(data as Venue[]);
-          return;
-        }
+        if (!rpcError && data) return data as Venue[];
       }
-      const matched = DEMO_VENUES.map((v) => ({
+      return DEMO_VENUES.map((v) => ({
         ...v,
-        distance_from_route_m: distanceToPolylineMeters([v.lng, v.lat], activeTrip.polyline),
+        distance_from_route_m: distanceToPolylineMeters([v.lng, v.lat], polyline),
       }))
-        .filter((v) => v.distance_from_route_m! <= activeTrip.buffer_meters)
+        .filter((v) => v.distance_from_route_m! <= bufferMeters)
         .sort((a, b) => a.distance_from_route_m! - b.distance_from_route_m!);
-      setVenues(matched);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+    },
+    []
+  );
+
+  const applyRoute = useCallback(
+    (option: RouteOption, from: GeocodedPlace, to: GeocodedPlace, bufferMeters: number) => {
+      setDrive({
+        distanceMeters: option.route.distanceMeters,
+        durationSeconds: option.route.durationSeconds,
+        isRoadRoute: option.route.isRoadRoute,
+      });
+      setTrip((prev) => ({
+        id: prev?.id ?? crypto.randomUUID(),
+        origin: from.label,
+        destination: to.label,
+        polyline: option.route.polyline,
+        buffer_meters: bufferMeters,
+        created_at: prev?.created_at ?? new Date().toISOString(),
+      }));
+      setVenues(option.venues);
+    },
+    []
+  );
 
   const planTrip = useCallback(async () => {
     setPlanning(true);
@@ -187,24 +210,32 @@ export function TripPlannerClient() {
       setOriginPlace(from);
       setDestinationPlace(to);
 
-      const route = await fetchDrivingRoute(from.lngLat, to.lngLat);
-      setDrive({
-        distanceMeters: route.distanceMeters,
-        durationSeconds: route.durationSeconds,
-        isRoadRoute: route.isRoadRoute,
-      });
-      setTrip({
-        id: crypto.randomUUID(),
-        origin: from.label,
-        destination: to.label,
-        polyline: route.polyline,
-        buffer_meters: milesToMeters(Math.min(bufferMi, maxDetour)),
-        created_at: new Date().toISOString(),
-      });
+      const bufferMeters = milesToMeters(Math.min(bufferMi, maxDetour));
+      const routes = await fetchDrivingRoutes(from.lngLat, to.lngLat);
+
+      setSearching(true);
+      const options: RouteOption[] = await Promise.all(
+        routes.map(async (route) => ({ route, venues: await queryCorridorVenues(route.polyline, bufferMeters) }))
+      );
+      setSearching(false);
+
+      setRouteOptions(options);
+      setSelectedRoute(0);
+      applyRoute(options[0], from, to, bufferMeters);
     } finally {
       setPlanning(false);
     }
-  }, [origin, destination, originPlace, destinationPlace, bufferMi, maxDetour]);
+  }, [origin, destination, originPlace, destinationPlace, bufferMi, maxDetour, queryCorridorVenues, applyRoute]);
+
+  const selectRoute = useCallback(
+    (index: number) => {
+      const option = routeOptions[index];
+      if (!option || !originPlace || !destinationPlace) return;
+      setSelectedRoute(index);
+      applyRoute(option, originPlace, destinationPlace, milesToMeters(Math.min(bufferMi, maxDetour)));
+    },
+    [routeOptions, originPlace, destinationPlace, bufferMi, maxDetour, applyRoute]
+  );
 
   // Hydrate from a shared ?tripId= link — state adjustment during render.
   const tripIdParam = searchParams.get("tripId");
@@ -221,13 +252,27 @@ export function TripPlannerClient() {
     }
   }
 
-  // Run the corridor query whenever a new trip becomes active.
-  const queriedTripId = useRef<string | null>(null);
+  // Run the corridor query when a shared trip link hydrates. (Trips created by
+  // planTrip/selectRoute already carry their venues — this only covers the
+  // ?tripId= case, which has a single fixed route with no alternatives.)
   useEffect(() => {
-    if (!trip || queriedTripId.current === trip.id) return;
-    queriedTripId.current = trip.id;
-    void runCorridorQuery(trip);
-  }, [trip, runCorridorQuery]);
+    if (!hydratedTripId) return;
+    const shared = decodeTripId(hydratedTripId);
+    if (!shared) return;
+    void (async () => {
+      setSearching(true);
+      const matched = await queryCorridorVenues(shared.polyline, shared.buffer_meters);
+      setRouteOptions([
+        {
+          route: { polyline: shared.polyline, distanceMeters: 0, durationSeconds: 0, isRoadRoute: true },
+          venues: matched,
+        },
+      ]);
+      setSelectedRoute(0);
+      setVenues(matched);
+      setSearching(false);
+    })();
+  }, [hydratedTripId, queryCorridorVenues]);
 
   const shareTrip = useCallback(async () => {
     if (!trip) return;
@@ -392,6 +437,44 @@ export function TripPlannerClient() {
         </div>
       )}
 
+      {routeOptions.length > 1 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">
+            {routeOptions.length} ways to get there — pick by highway or by how many rooms are on the way:
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {routeOptions.map((option, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => selectRoute(i)}
+                className={cn(
+                  "rounded-xl border p-4 text-left transition-colors",
+                  i === selectedRoute
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {option.route.via ? `via ${option.route.via}` : `Route ${i + 1}`}
+                  </span>
+                  {i === selectedRoute && <Badge variant="accent">Selected</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatMiles(option.route.distanceMeters)}
+                  {option.route.isRoadRoute ? ` · ${formatDriveTime(option.route.durationSeconds)}` : ""}
+                </p>
+                <p className="mt-1 text-sm">
+                  <span className="font-semibold text-primary">{option.venues.length}</span> pool room
+                  {option.venues.length === 1 ? "" : "s"} on this route
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {trip && (
         <Card className="overflow-hidden p-0">
           <TripMap
@@ -400,6 +483,9 @@ export function TripPlannerClient() {
             venues={venues}
             origin={mapOrigin}
             destination={mapDestination}
+            alternateRoutes={routeOptions.map((o) => o.route.polyline)}
+            selectedRouteIndex={selectedRoute}
+            onSelectRoute={selectRoute}
             className="h-[420px] w-full sm:h-[480px]"
           />
         </Card>
