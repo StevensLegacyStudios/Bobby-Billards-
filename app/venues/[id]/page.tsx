@@ -78,6 +78,22 @@ function formatEventWhen(event: VenueEvent): string {
   return starts.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://buddy-billiards.vercel.app";
+
+/** A real, specific description per venue — what actually helps search
+ * results and social shares stand out, instead of one generic sentence
+ * repeated on every page. */
+function describeVenue(venue: Venue): string {
+  const bits: string[] = [];
+  if (venue.rating) bits.push(`rated ${venue.rating}★`);
+  const spec = venue.table_specifications?.[0];
+  if (spec) bits.push(`${spec.count}× ${spec.label}`);
+  if (venue.cloth_quality) bits.push(venue.cloth_quality.replaceAll("_", " ") + " cloth");
+  if (venue.pocket_widths) bits.push(venue.pocket_widths.replaceAll("_", " ") + " pockets");
+  const detail = bits.length > 0 ? bits.join(", ") : "table conditions verified by players";
+  return `${venue.name} — ${detail}. See directions, hours, and upcoming events on Buddy Billiards.`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -85,7 +101,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const venue = await fetchVenue(id);
-  return { title: venue?.name ?? "Venue" };
+  if (!venue) return { title: "Venue" };
+  const description = describeVenue(venue);
+  return {
+    title: venue.name,
+    description,
+    alternates: { canonical: `${SITE_URL}/venues/${venue.id}` },
+    openGraph: { title: venue.name, description, url: `${SITE_URL}/venues/${venue.id}`, type: "website" },
+    twitter: { card: "summary", title: venue.name, description },
+  };
 }
 
 export default async function VenuePage({
@@ -101,8 +125,32 @@ export default async function VenuePage({
   const events = await fetchVenueEvents(venue.id);
   const houseShot = solveDirectShot([45, 65], [130, 42], POCKETS.top_right);
 
+  // Real fields only — no fabricated review counts or ratings. Google's
+  // structured-data guidelines require a source for aggregate ratings we
+  // don't have, so this sticks to name/location/contact/hours.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SportsActivityLocation",
+    name: venue.name,
+    url: `${SITE_URL}/venues/${venue.id}`,
+    ...(venue.phone ? { telephone: venue.phone } : {}),
+    ...(venue.lat && venue.lng
+      ? { geo: { "@type": "GeoCoordinates", latitude: venue.lat, longitude: venue.lng } }
+      : {}),
+    ...(venue.hours
+      ? { openingHours: Object.entries(venue.hours).map(([day, range]) => `${day} ${range}`) }
+      : {}),
+  };
+
   return (
     <div className="space-y-8">
+      {/* Safe: venue.name/phone/hours come from the Google Places sync job, not
+          free-form user input, but the replace guards against a stray "</script>"
+          breaking out of the tag regardless. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+      />
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{venue.name}</h1>
