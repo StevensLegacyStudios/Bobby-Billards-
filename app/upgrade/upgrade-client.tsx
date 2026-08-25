@@ -36,7 +36,7 @@ export function UpgradeClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { tier, isPremium, refresh } = useTier();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const success = searchParams.get("success");
@@ -46,10 +46,12 @@ export function UpgradeClient() {
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({
           plan: "premium",
-          userId: user?.id ?? null,
           email: user?.email ?? null,
         }),
       });

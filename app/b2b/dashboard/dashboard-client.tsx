@@ -32,6 +32,8 @@ import { WEEKDAY_NAMES } from "@/lib/hours";
 import { VERIFIED_VENUE_PRICE_USD } from "@/lib/tier";
 import type { VenueEvent } from "@/lib/types";
 
+import { ClaimVenue } from "./claim-venue";
+
 interface OwnedVenue {
   id: string;
   name: string;
@@ -71,7 +73,7 @@ function describeWhen(event: VenueEvent): string {
 
 export function B2bDashboardClient() {
   const searchParams = useSearchParams();
-  const { user, supabase, configured } = useAuth();
+  const { user, session, supabase, configured } = useAuth();
   const [demoVenueId, setDemoVenueId] = useState(DEMO_VENUES[0].id);
   const [verifyPending, setVerifyPending] = useState(false);
   const [demoVerified, setDemoVerified] = useState(searchParams.get("verified") === "demo");
@@ -198,20 +200,35 @@ export function B2bDashboardClient() {
     };
   }, [canPostLive, supabase, selectedOwned, liveEvents]);
 
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  // Only a real, owned venue can be verified — checkout itself re-checks
+  // ownership server-side, but there's nothing legitimate to buy here
+  // without one, so the button isn't even shown otherwise (see below).
   const startVerification = async () => {
+    if (!canPostLive || !selectedOwned) return;
     setVerifyPending(true);
+    setVerifyError(null);
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "verified_venue", venueId: venue.id }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ plan: "verified_venue", venueId: selectedOwned.id }),
       });
       const data = await res.json();
       if (data.url?.startsWith("http")) {
         window.location.href = data.url;
+      } else if (data.demo) {
+        // No Stripe keys configured (local dev) — the real webhook would
+        // flip is_verified in Supabase, so mirror that locally instead.
+        setOwnedVenues((prev) =>
+          prev?.map((v) => (v.id === selectedOwned.id ? { ...v, is_verified: true } : v)) ?? prev
+        );
       } else {
-        // Demo grant — the Stripe webhook would flip is_verified in Supabase.
-        setDemoVerified(true);
+        setVerifyError(data.message ?? "Couldn't start checkout — try again.");
       }
     } finally {
       setVerifyPending(false);
@@ -391,9 +408,9 @@ export function B2bDashboardClient() {
                 <p>
                   <strong>No real venue is linked to your account yet.</strong> Everything below
                   (venue name, stats, published events) is illustrative demo data — it isn&apos;t
-                  tied to your account and isn&apos;t seen by real players. Venue-claiming isn&apos;t
-                  wired up in this build yet; contact support to get your room linked to your
-                  account, and this panel will switch to your real numbers automatically.
+                  tied to your account and isn&apos;t seen by real players. Find your venue and
+                  submit a claim in the Verified Venue Profile card below to get it linked, and
+                  this panel switches to your real numbers automatically.
                 </p>
               ) : (
                 <p>
@@ -421,15 +438,30 @@ export function B2bDashboardClient() {
           <CardDescription>
             {isVerified
               ? "Your registration is confirmed. The verified badge, table specifications, and event publishing are live across the consumer app."
-              : `Upload your business registration to activate the verified badge, publish table specifications, and unlock event publishing — $${VERIFIED_VENUE_PRICE_USD.toFixed(2)}/mo. Verification flips automatically when the Stripe provisioning webhook lands.`}
+              : canPostLive
+                ? `Upload your business registration to activate the verified badge, publish table specifications, and unlock event publishing — $${VERIFIED_VENUE_PRICE_USD.toFixed(2)}/mo. Verification flips automatically when the Stripe provisioning webhook lands.`
+                : liveMode
+                  ? "No real venue is linked to your account yet — find it below and submit a claim. Once it's linked, verification unlocks here for real."
+                  : "Sign in, then link your real venue, to activate the verified badge and event publishing."}
           </CardDescription>
         </CardHeader>
         {!isVerified && (
-          <CardContent className="flex flex-wrap items-center gap-3">
-            <Input type="file" className="max-w-xs" aria-label="Business registration document" />
-            <Button onClick={startVerification} disabled={verifyPending}>
-              {verifyPending ? "Starting checkout…" : `Verify for $${VERIFIED_VENUE_PRICE_USD.toFixed(2)}/mo`}
-            </Button>
+          <CardContent className="space-y-3">
+            {canPostLive && selectedOwned ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Input type="file" className="max-w-xs" aria-label="Business registration document" />
+                <Button onClick={startVerification} disabled={verifyPending}>
+                  {verifyPending ? "Starting checkout…" : `Verify for $${VERIFIED_VENUE_PRICE_USD.toFixed(2)}/mo`}
+                </Button>
+              </div>
+            ) : liveMode ? (
+              supabase && user && <ClaimVenue supabase={supabase} user={user} />
+            ) : (
+              <Button asChild>
+                <Link href="/account">Sign in to claim your venue</Link>
+              </Button>
+            )}
+            {verifyError && <p className="text-sm text-destructive">{verifyError}</p>}
           </CardContent>
         )}
       </Card>
