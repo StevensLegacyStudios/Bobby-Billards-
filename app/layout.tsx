@@ -21,6 +21,16 @@ export const metadata: Metadata = {
   },
   description:
     "Find verified billiard rooms along your route, validate table conditions, and train shots on an AI-powered 3D table.",
+  // Manifest + icon/apple-icon <link> tags are auto-injected by Next from
+  // app/manifest.ts, app/icon.tsx, and app/apple-icon.tsx — this is the
+  // part those file conventions don't cover: the older Safari-specific tags
+  // that make "Add to Home Screen" launch full-screen with no address bar
+  // instead of just a bookmark shortcut into a regular browser tab.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Buddy Billiards",
+  },
 };
 
 export const viewport: Viewport = {
